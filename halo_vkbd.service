@@ -1,0 +1,14 @@
+[Unit]
+Description=Halo Keyboard Service
+After=systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/halo_kbd /usr/local/etc/halo_keyboard/yogabook1.map
+ExecStop=/bin/kill -s SIGINT -$MAINPID
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
