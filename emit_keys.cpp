@@ -34,6 +34,9 @@ int init_linux_input(const kbd_map & key_map)
         assert_throw(ioctl(fd, UI_SET_KEYBIT, key) != -1);
     }
 
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_HOME) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_END) != -1);
+
     /* 2.  Create the virtual device */
     uinput_setup usetup{};
     std::strcpy(usetup.name, "Halo Keyboard");
