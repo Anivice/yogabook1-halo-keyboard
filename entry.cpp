@@ -27,7 +27,6 @@ const std::map < const unsigned int, const KeyAction > SpecialKeys =
     { 97    /* RCtrl */,    KEY_COMBINATION_ONLY },
     { 42    /* LShift */,   KEY_COMBINATION_ONLY },
     { 54    /* RShift */,   KEY_PERSISTS_UNTIL_FN_RELEASE },
-    { 58    /* CapsLock */, KEY_PERSISTS_UNTIL_FN_RELEASE },
 };
 
 const std::map < const unsigned int, const std::string > key_id_to_str_translation_table =
