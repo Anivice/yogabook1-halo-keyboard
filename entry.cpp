@@ -14,6 +14,8 @@
 #include <iostream>
 #include <ranges>
 #include <functional>
+#include <linux/kd.h>
+#include <sys/ioctl.h>
 
 constexpr unsigned int dispatch_repeated_key_delay_ms = 70;
 enum KeyAction { RELEASE_ALL_KEYS, KEY_COMBINATION_ONLY, KEY_PERSISTS_UNTIL_FN_RELEASE };
@@ -169,6 +171,31 @@ std::vector < std::string > key_id_translate(const Type & keys)
     return ret;
 }
 
+bool if_capslock_enabled()
+{
+    const int fd = open("/dev/console", O_RDONLY);
+    if (fd < 0) {
+        perror("open");
+        return false;
+    }
+
+    int leds;
+    if (ioctl(fd, KDGETLED, &leds) == -1) {
+        perror("ioctl");
+        return false;
+    }
+
+    close(fd);
+
+    if (leds & LED_CAP) { /* LED_CAP == 0x04 */
+        // if (DEBUG) { debug::log("CapsLock reported as enabled\n"); }
+        return true;
+    }
+
+    // if (DEBUG) { debug::log("CapsLock reported as disabled\n"); }
+    return false;
+}
+
 void emit_key_thread()
 {
     pthread_setname_np(pthread_self(), "VirKbd");
@@ -196,11 +223,13 @@ void emit_key_thread()
                                 emit(vkbd_fd, EV_KEY, _key /* key code */, 0 /* release key */);
                                 emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                                 invalid_keys.emplace_back(_key);
+                                if (DEBUG) debug::log("Released key ", key_id_translate(_key), "\n");
                             }
 
                             for (auto & _key : persistent_keys) {
                                 emit(vkbd_fd, EV_KEY, _key /* key code */, 0 /* release key */);
                                 emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                                if (DEBUG) debug::log("Released key ", key_id_translate(_key), "\n");
                             }
 
                             // dispatched keys are not released, and is already handled in the first release loop
@@ -210,6 +239,16 @@ void emit_key_thread()
                                 if (thread.joinable()) {
                                     thread.join();
                                 }
+                            }
+
+                            // check if CapsLock enabled on VT
+                            if (if_capslock_enabled())
+                            {
+                                emit(vkbd_fd, EV_KEY, KEY_CAPSLOCK, 1);
+                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0);
+                                emit(vkbd_fd, EV_KEY, KEY_CAPSLOCK, 0);
+                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0);
+                                if (DEBUG) debug::log("Released key ", key_id_translate(KEY_CAPSLOCK), "\n");
                             }
 
                             combination_sp_keys.clear();
@@ -300,7 +339,7 @@ void emit_key_thread()
                                     invalid_keys.push_back(KEY_LEFTMETA);
                                     combination_sp_keys.clear();
                                 } else if (key_id == KEY_BACKSPACE || key_id == KEY_UP || key_id == KEY_DOWN) {
-                                    if (DEBUG) debug::log("Executing repeated key", key_id_translate(key_id), "\n");
+                                    if (DEBUG) debug::log("Executing repeated key ", key_id_translate(key_id), "\n");
                                     auto repeat_dispatcher = [&](const std::atomic_bool * do_i_stop)
                                     {
                                         while (!*do_i_stop) {
@@ -350,7 +389,8 @@ void emit_key_thread()
                         } else {
                             if (DEBUG) {
                                 debug::log("Normal key press ", key_id_translate(key_id),
-                                    " (persisted: ", key_id_translate(persistent_keys), ")\n");
+                                    " (persisted: ", key_id_translate(persistent_keys),
+                                    ", CapsLock=", if_capslock_enabled(), ")\n");
                             }
                             emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
                             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync

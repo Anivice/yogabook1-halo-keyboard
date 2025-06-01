@@ -1,0 +1,12 @@
+keycode 105 =  Left
+        control keycode 105 = F50
+string  F50 = "\033[1;5D"
+
+keycode 106 =  Right
+        control keycode 106 = F51
+string  F51 = "\033[1;5C"
+
+keycode 14  = Delete BackSpace
+        control keycode 14  = F52
+string  F52 = "\033[3;5~"
+
