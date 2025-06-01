@@ -5,10 +5,11 @@ Wants=systemd-udev-settle.service
 
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/loadkeys /usr/local/etc/halo_keyboard/ctrlword.map
 ExecStart=/usr/local/bin/halo_kbd /usr/local/etc/halo_keyboard/yogabook1.map
 ExecStop=/bin/kill -s SIGINT -$MAINPID
 KillMode=process
-Restart=always
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
