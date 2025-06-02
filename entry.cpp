@@ -435,6 +435,67 @@ void emit_key_thread()
     debug::log("Shutting down virtual keyboard...\n");
 }
 
+void touchpad_mouse_handler(const kbd_map & map,
+    const double x, const double y,
+    const unsigned int determined_key,
+    const int mouse_fd,
+    const libinput_event_type type,
+    const int slot,
+    const int touchpad_width, const int touchpad_height,
+    int & next_id)
+{
+    if (type == LIBINPUT_EVENT_TOUCH_DOWN && (determined_key == BTN_LEFT || determined_key == BTN_RIGHT))
+    {
+        emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
+        emit(mouse_fd, EV_KEY, determined_key, 1);
+        emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
+        emit(mouse_fd, EV_KEY, determined_key, 0);
+        emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
+        if (DEBUG) { debug::log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
+    }
+    else if (determined_key == 512 || type == LIBINPUT_EVENT_TOUCH_UP)
+    {
+        const auto new_y = std::max(800 - static_cast<int>((x - map.at(512).key_pixel_top_left_x)
+            / static_cast<double>(touchpad_width) * 800), 0);
+        const auto new_x = std::max(static_cast<int>((y - map.at(512).key_pixel_top_left_y)
+            / static_cast<double>(touchpad_height) * 1280), 0);
+
+        /* 0. choose slot FIRST (always, even if it stays 0) */
+        emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
+
+        /* 1. contact bookkeeping */
+        if (type == LIBINPUT_EVENT_TOUCH_DOWN) {
+            emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, next_id++);
+            emit(mouse_fd, EV_KEY, BTN_TOUCH,          1);
+            emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    1);
+            emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 128);
+        } else if (type == LIBINPUT_EVENT_TOUCH_UP) {
+            emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 0);
+            emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, -1);
+            emit(mouse_fd, EV_KEY, BTN_TOUCH,          0);
+            emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    0);
+        }
+
+        /* 2. coordinates while finger is down */
+        if (type != LIBINPUT_EVENT_TOUCH_UP) {
+            emit(mouse_fd, EV_ABS, ABS_MT_POSITION_X, new_x);
+            emit(mouse_fd, EV_ABS, ABS_MT_POSITION_Y, new_y);
+
+            /* mirror slot-0 to single-touch axes */
+            if (slot == 0) {
+                emit(mouse_fd, EV_ABS, ABS_X, new_x);
+                emit(mouse_fd, EV_ABS, ABS_Y, new_y);
+            }
+        }
+
+        /* 3. flush the packet */
+        emit(mouse_fd, EV_SYN, SYN_REPORT, 0);
+
+        if (DEBUG) { debug::log("TouchPad movement (", x, ", ", y, ") "
+            "mapped to (", new_x, ", ", new_y, "), slot=", slot, "\n"); }
+    }
+}
+
 static int open_restricted(const char *path, int flags, void *user_data) {
     return open(path, flags);
 }
@@ -571,56 +632,7 @@ int main(int argc, char** argv)
                     if ((map.contains(BTN_LEFT) && x <= map.at(BTN_LEFT).key_pixel_bottom_right_x && x > 0)
                         || type == LIBINPUT_EVENT_TOUCH_UP)
                     {
-                        if (type == LIBINPUT_EVENT_TOUCH_DOWN && (determined_key == BTN_LEFT || determined_key == BTN_RIGHT))
-                        {
-                            emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
-                            emit(mouse_fd, EV_KEY, determined_key, 1);
-                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
-                            emit(mouse_fd, EV_KEY, determined_key, 0);
-                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
-                            if (DEBUG) { debug::log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
-                        }
-                        else if (determined_key == 512 || type == LIBINPUT_EVENT_TOUCH_UP)
-                        {
-                            const auto new_y = std::max(800 - static_cast<int>((x - map.at(512).key_pixel_top_left_x)
-                                / static_cast<double>(touchpad_width) * 800), 0);
-                            const auto new_x = std::max(static_cast<int>((y - map.at(512).key_pixel_top_left_y)
-                                / static_cast<double>(touchpad_height) * 1280), 0);
-
-                            /* 0. choose slot FIRST (always, even if it stays 0) */
-                            emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
-
-                            /* 1. contact bookkeeping */
-                            if (type == LIBINPUT_EVENT_TOUCH_DOWN) {
-                                emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, next_id++);
-                                emit(mouse_fd, EV_KEY, BTN_TOUCH,          1);
-                                emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    1);
-                                emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 128);
-                            } else if (type == LIBINPUT_EVENT_TOUCH_UP) {
-                                emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 0);
-                                emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, -1);
-                                emit(mouse_fd, EV_KEY, BTN_TOUCH,          0);
-                                emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    0);
-                            }
-
-                            /* 2. coordinates while finger is down */
-                            if (type != LIBINPUT_EVENT_TOUCH_UP) {
-                                emit(mouse_fd, EV_ABS, ABS_MT_POSITION_X, new_x);
-                                emit(mouse_fd, EV_ABS, ABS_MT_POSITION_Y, new_y);
-
-                                /* mirror slot-0 to single-touch axes */
-                                if (slot == 0) {
-                                    emit(mouse_fd, EV_ABS, ABS_X, new_x);
-                                    emit(mouse_fd, EV_ABS, ABS_Y, new_y);
-                                }
-                            }
-
-                            /* 3. flush the packet */
-                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0);
-
-                            if (DEBUG) { debug::log("TouchPad movement (", x, ", ", y, ") "
-                                "mapped to (", new_x, ", ", new_y, "), slot=", slot, "\n"); }
-                        }
+                        touchpad_mouse_handler(map, x, y, determined_key, mouse_fd, type, slot, touchpad_width, touchpad_height, next_id);
                     }
                     else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
                     {
