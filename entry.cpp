@@ -18,6 +18,7 @@
 #include <sys/ioctl.h>
 
 constexpr unsigned int dispatch_repeated_key_delay_ms = 70;
+constexpr unsigned int touchpad_mouse_region_id = 512;
 enum KeyAction { RELEASE_ALL_KEYS, KEY_COMBINATION_ONLY, KEY_PERSISTS_UNTIL_FN_RELEASE };
 const std::map < const unsigned int, const KeyAction > SpecialKeys =
 {
@@ -125,6 +126,11 @@ const std::map < const unsigned int, const std::string > key_id_to_str_translati
     { 87, "F11" },
     { 88, "F12" },
     { 111, "Delete" },
+
+    // group 7
+    { 272, "MouseLeft" },
+    { 273, "MouseRight" },
+    { touchpad_mouse_region_id, "TouchPad" },
 };
 
 volatile std::atomic_int ctrl_c = 0;
@@ -172,6 +178,10 @@ std::vector < std::string > key_id_translate(const Type & keys)
 }
 
 bool if_capslock_enabled()
+// NOTE: This programs works in system service and cannot query user-wise wayland compositor directly
+// wayland sessions are per-session per-user, cross user resource referencing is strictly prohibited in many, if not all, compositors
+// thus, the following query works only on active VT (Virtual Terminal, the actually text only environment), not with wayland enabled
+// With wayland session active, user does not own '/dev/console' any longer and CapsLock will always be reported as Not Locked
 {
     const int fd = open("/dev/console", O_RDONLY);
     if (fd < 0) {
@@ -363,6 +373,7 @@ void emit_key_thread()
                             }
                             else
                             {
+                                if (DEBUG) debug::log("Normal key combination handler\n");
                                 // press combination
                                 for (const auto key : combination_sp_keys) {
                                     emit(vkbd_fd, EV_KEY, key /* key code */, 1 /* press down */);
@@ -383,6 +394,7 @@ void emit_key_thread()
                                 }
                                 invalid_keys.push_back(key_id);
                                 combination_sp_keys.clear();
+                                state.normal_press_handled = true;
                             }
 
                             break; // this will abort processing all pending keys inside the cache, until slots are deleted
@@ -461,26 +473,29 @@ int main(int argc, char** argv)
     vkbd_fd = init_linux_input(map);
     debug::log("done.\n");
 
+    debug::log("Initializing Linux input interface for virtual mouse...");
+    int mouse_fd = init_linux_mouse_input();
+    debug::log("done.\n");
+
     // load keyboard touchpad
     libinput *li = nullptr;
     debug::log("Initializing Halo keyboard input interface...");
 
     // 1. create libinput context
-    // debug::log("    Creating udev and libinput context...\n");
+    if (DEBUG) debug::log("\n    Creating udev and libinput context...\n");
     udev *udev = udev_new();
     li = libinput_udev_create_context(&interface, nullptr, udev);
     if (!li) {
         std::cerr << "Failed to create libinput context\n";
         return EXIT_FAILURE;
     }
-    // debug::log("    => libinput context: ", li, "(udev=", udev, ")\n");
 
     // 2. assign seat
-    // debug::log("    Assigning seat to seat0...\n");
+    if (DEBUG) debug::log("    Assigning seat to seat0...\n");
     assert_throw(libinput_udev_assign_seat(li, "seat0") == 0);
-    // debug::log("    Export file descriptor...\n");
+    if (DEBUG) debug::log("    Export file descriptor...\n");
     halo_device_fd = libinput_get_fd(li);
-    // debug::log("    => File descriptor for device input is ", halo_device_fd, "\n");
+    if (DEBUG) debug::log("    => File descriptor for device input is ", halo_device_fd, "\n");
     debug::log("done.\n");
 
     // start virtual keyboard handling thread
@@ -498,6 +513,10 @@ int main(int argc, char** argv)
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
+    int next_id = 0;
+    const auto touchpad_width = map.at(512).key_pixel_bottom_right_x - map.at(512).key_pixel_top_left_x;
+    const auto touchpad_height = map.at(512).key_pixel_bottom_right_y - map.at(512).key_pixel_top_left_y;
+
     while (!ctrl_c)
     {
         // wait until libinput_fd is ready
@@ -512,7 +531,9 @@ int main(int argc, char** argv)
         while ((ev = libinput_get_event(li)))
         {
             const auto type = libinput_event_get_type(ev);
-            if (type == LIBINPUT_EVENT_TOUCH_DOWN)
+            if (type == LIBINPUT_EVENT_TOUCH_DOWN
+                || type == LIBINPUT_EVENT_TOUCH_UP
+                || type == LIBINPUT_EVENT_TOUCH_MOTION)
             {
                 libinput_event_touch *tev =
                     libinput_event_get_touch_event(ev);
@@ -529,8 +550,11 @@ int main(int argc, char** argv)
                 }
 
                 const int32_t slot = libinput_event_touch_get_seat_slot(tev);
-                double x = libinput_event_touch_get_x_transformed(tev, 1920);
-                double y = libinput_event_touch_get_y_transformed(tev, 2400);
+                double x = 0.00f, y = 0.00f;
+                if (type != LIBINPUT_EVENT_TOUCH_UP) {
+                    x = libinput_event_touch_get_x_transformed(tev, 1920);
+                    y = libinput_event_touch_get_y_transformed(tev, 2400);
+                }
 
                 long determined_key = -1;
                 // determine the key (fucking just iterate through)
@@ -542,31 +566,89 @@ int main(int argc, char** argv)
                     }
                 }
 
-                if (determined_key != -1)
+                if (determined_key != -1 || type == LIBINPUT_EVENT_TOUCH_UP)
                 {
-                    if (time_of_the_last_press_event.contains(determined_key))
+                    if ((map.contains(BTN_LEFT) && x <= map.at(BTN_LEFT).key_pixel_bottom_right_x && x > 0)
+                        || type == LIBINPUT_EVENT_TOUCH_UP)
                     {
-                        const auto now = std::chrono::high_resolution_clock::now();
-                        const auto interval_since_press_down =
-                            now - time_of_the_last_press_event.at(determined_key);
-                        if (interval_since_press_down <
-                            std::chrono::microseconds(50))
+                        if (type == LIBINPUT_EVENT_TOUCH_DOWN && (determined_key == BTN_LEFT || determined_key == BTN_RIGHT))
                         {
-                            continue; // ignore consecutive key press
+                            emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
+                            emit(mouse_fd, EV_KEY, determined_key, 1);
+                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            emit(mouse_fd, EV_KEY, determined_key, 0);
+                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            if (DEBUG) { debug::log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
+                        }
+                        else if (determined_key == 512 || type == LIBINPUT_EVENT_TOUCH_UP)
+                        {
+                            const auto new_y = std::max(800 - static_cast<int>((x - map.at(512).key_pixel_top_left_x)
+                                / static_cast<double>(touchpad_width) * 800), 0);
+                            const auto new_x = std::max(static_cast<int>((y - map.at(512).key_pixel_top_left_y)
+                                / static_cast<double>(touchpad_height) * 1280), 0);
+
+                            /* 0. choose slot FIRST (always, even if it stays 0) */
+                            emit(mouse_fd, EV_ABS, ABS_MT_SLOT, slot);
+
+                            /* 1. contact bookkeeping */
+                            if (type == LIBINPUT_EVENT_TOUCH_DOWN) {
+                                emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, next_id++);
+                                emit(mouse_fd, EV_KEY, BTN_TOUCH,          1);
+                                emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    1);
+                                emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 128);
+                            } else if (type == LIBINPUT_EVENT_TOUCH_UP) {
+                                emit(mouse_fd, EV_ABS, ABS_MT_PRESSURE, 0);
+                                emit(mouse_fd, EV_ABS, ABS_MT_TRACKING_ID, -1);
+                                emit(mouse_fd, EV_KEY, BTN_TOUCH,          0);
+                                emit(mouse_fd, EV_KEY, BTN_TOOL_FINGER,    0);
+                            }
+
+                            /* 2. coordinates while finger is down */
+                            if (type != LIBINPUT_EVENT_TOUCH_UP) {
+                                emit(mouse_fd, EV_ABS, ABS_MT_POSITION_X, new_x);
+                                emit(mouse_fd, EV_ABS, ABS_MT_POSITION_Y, new_y);
+
+                                /* mirror slot-0 to single-touch axes */
+                                if (slot == 0) {
+                                    emit(mouse_fd, EV_ABS, ABS_X, new_x);
+                                    emit(mouse_fd, EV_ABS, ABS_Y, new_y);
+                                }
+                            }
+
+                            /* 3. flush the packet */
+                            emit(mouse_fd, EV_SYN, SYN_REPORT, 0);
+
+                            if (DEBUG) { debug::log("TouchPad movement (", x, ", ", y, ") "
+                                "mapped to (", new_x, ", ", new_y, "), slot=", slot, "\n"); }
                         }
                     }
-
-                    std::lock_guard guard(g_mutex);
-                    // avoid conflicting keys
-                    if (!pressed_key.contains(determined_key))
+                    else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
                     {
-                        if (DEBUG) {
-                            debug::log("Key ", key_id_translate(determined_key),
-                                " (", determined_key, ") "
-                                "press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
+                        // keyboard only cares about `LIBINPUT_EVENT_TOUCH_DOWN`
+                        if (time_of_the_last_press_event.contains(determined_key))
+                        {
+                            const auto now = std::chrono::high_resolution_clock::now();
+                            const auto interval_since_press_down =
+                                now - time_of_the_last_press_event.at(determined_key);
+                            if (interval_since_press_down <
+                                std::chrono::microseconds(50))
+                            {
+                                continue; // ignore consecutive key press
+                            }
                         }
-                        time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
-                        pressed_key[determined_key].normal_press_handled = false;
+
+                        std::lock_guard guard(g_mutex);
+                        // avoid conflicting keys
+                        if (!pressed_key.contains(determined_key))
+                        {
+                            if (DEBUG) {
+                                debug::log("Key ", key_id_translate(determined_key),
+                                    " (", determined_key, ") "
+                                    "press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
+                            }
+                            time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
+                            pressed_key[determined_key].normal_press_handled = false;
+                        }
                     }
                 }
                 else if (DEBUG) {
