@@ -211,8 +211,6 @@ void emit_key_thread()
     pthread_setname_np(pthread_self(), "VirKbd");
     thread_local std::vector < unsigned int > combination_sp_keys;
     thread_local std::vector < unsigned int > persistent_keys;
-    thread_local std::vector < std::pair < std::unique_ptr < std::atomic_bool >, std::thread > >
-        dispatch_execution_effective;
 
     while (!ctrl_c)
     {
@@ -242,15 +240,6 @@ void emit_key_thread()
                                 if (DEBUG) debug::log("Released key ", key_id_translate(_key), "\n");
                             }
 
-                            // dispatched keys are not released, and is already handled in the first release loop
-                            for (auto & [flag, thread] : dispatch_execution_effective)
-                            {
-                                *flag = true;
-                                if (thread.joinable()) {
-                                    thread.join();
-                                }
-                            }
-
                             // check if CapsLock enabled on VT
                             if (if_capslock_enabled())
                             {
@@ -263,7 +252,6 @@ void emit_key_thread()
 
                             combination_sp_keys.clear();
                             persistent_keys.clear();
-                            dispatch_execution_effective.clear();
                             if (DEBUG) {
                                 debug::log("All keys are now released\n");
                             }
@@ -271,18 +259,8 @@ void emit_key_thread()
                         }
                         else if (sp_key_id == KEY_COMBINATION_ONLY)
                         {
-                            if ((key_id == KEY_LEFTMETA && dispatch_execution_effective.empty())
-                                // left meta pressed and has no ongoing dispatch
-                                || key_id != KEY_LEFTMETA) // or not left meta at all
-                            {
-                                combination_sp_keys.push_back(key_id);
-                                if (DEBUG) {
-                                    debug::log("Functional key ", key_id_translate(key_id), " registered\n");
-                                }
-                            }
-                            else if (DEBUG) {
-                                debug::log("Current META dispatch ignore, there is one dispatch already being executed\n");
-                            }
+                            combination_sp_keys.push_back(key_id);
+                            if (DEBUG) debug::log("Functional key ", key_id_translate(key_id), " registered\n");
                             state.normal_press_handled = true;
                         }
                         else if (sp_key_id == KEY_PERSISTS_UNTIL_FN_RELEASE)
@@ -321,81 +299,28 @@ void emit_key_thread()
 
                         if (!combination_sp_keys.empty())
                         {
-                            // check special combinations
-                            // Win + Left == HOME
-                            // Win + Right == END
-                            if (combination_sp_keys.size() == 1 && combination_sp_keys[0] == KEY_LEFTMETA /* win */)
-                            {
-                                if (key_id == KEY_LEFT /* Left arrow */) {
-                                    if (DEBUG) debug::log("Executing HOME\n");
-                                    emit(vkbd_fd, EV_KEY, KEY_HOME /* key code */, 1 /* press down */);
-                                    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                    emit(vkbd_fd, EV_KEY, KEY_HOME /* key code */, 0 /* release */);
-                                    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-
-                                    // 2 keys are marked as invalid
-                                    invalid_keys.push_back(key_id);
-                                    invalid_keys.push_back(KEY_LEFTMETA);
-                                    combination_sp_keys.clear();
-                                } else if (key_id == KEY_RIGHT /* Right arrow */) {
-                                    if (DEBUG) debug::log("Executing END\n");
-                                    emit(vkbd_fd, EV_KEY, KEY_END /* key code */, 1 /* press down */);
-                                    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                    emit(vkbd_fd, EV_KEY, KEY_END /* key code */, 0 /* release */);
-                                    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-
-                                    // 2 keys are marked as invalid
-                                    invalid_keys.push_back(key_id);
-                                    invalid_keys.push_back(KEY_LEFTMETA);
-                                    combination_sp_keys.clear();
-                                } else if (key_id == KEY_BACKSPACE || key_id == KEY_UP || key_id == KEY_DOWN) {
-                                    if (DEBUG) debug::log("Executing repeated key ", key_id_translate(key_id), "\n");
-                                    auto repeat_dispatcher = [&](const std::atomic_bool * do_i_stop)
-                                    {
-                                        while (!*do_i_stop) {
-                                            if (DEBUG) debug::log("Executing ", key_id_translate(key_id), "\n");
-                                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
-                                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                            std::this_thread::sleep_for(std::chrono::milliseconds(dispatch_repeated_key_delay_ms));
-                                        }
-                                    };
-
-                                    dispatch_execution_effective.emplace_back(std::make_unique<std::atomic_bool>(false),
-                                        std::thread{});
-                                    dispatch_execution_effective.back().second = std::thread(repeat_dispatcher,
-                                        dispatch_execution_effective.back().first.get());
-                                    // no key marked invalid
-                                    state.normal_press_handled = true;
-                                    combination_sp_keys.clear();
-                                }
+                            if (DEBUG) debug::log("Normal key combination handler\n");
+                            // press combination
+                            for (const auto key : combination_sp_keys) {
+                                emit(vkbd_fd, EV_KEY, key /* key code */, 1 /* press down */);
                             }
-                            else
-                            {
-                                if (DEBUG) debug::log("Normal key combination handler\n");
-                                // press combination
-                                for (const auto key : combination_sp_keys) {
-                                    emit(vkbd_fd, EV_KEY, key /* key code */, 1 /* press down */);
-                                }
-                                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
 
-                                // release all keys
-                                for (const auto key : combination_sp_keys) {
-                                    emit(vkbd_fd, EV_KEY, key /* key code */, 0);
-                                }
-                                emit(vkbd_fd, EV_KEY, key_id /* key code */, 0);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-
-                                // clear all keys in the buffer
-                                for (const auto &_key: combination_sp_keys) {
-                                    invalid_keys.push_back(_key);
-                                }
-                                invalid_keys.push_back(key_id);
-                                combination_sp_keys.clear();
-                                state.normal_press_handled = true;
+                            // release all keys
+                            for (const auto key : combination_sp_keys) {
+                                emit(vkbd_fd, EV_KEY, key /* key code */, 0);
                             }
+                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0);
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+
+                            // clear all keys in the buffer
+                            for (const auto &_key: combination_sp_keys) {
+                                invalid_keys.push_back(_key);
+                            }
+                            invalid_keys.push_back(key_id);
+                            combination_sp_keys.clear();
+                            state.normal_press_handled = true;
 
                             break; // this will abort processing all pending keys inside the cache, until slots are deleted
                         } else {
@@ -423,15 +348,6 @@ void emit_key_thread()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // release all dispatched loops
-    for (auto & [flag, thread] : dispatch_execution_effective)
-    {
-        *flag = true;
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-
     debug::log("Shutting down virtual keyboard...\n");
 }
 
@@ -441,7 +357,7 @@ void touchpad_mouse_handler(const kbd_map & map,
     const int mouse_fd,
     const libinput_event_type type,
     const int slot,
-    const int touchpad_width, const int touchpad_height,
+    const double touchpad_width, const double touchpad_height,
     int & next_id)
 {
     if (type == LIBINPUT_EVENT_TOUCH_DOWN && (determined_key == BTN_LEFT || determined_key == BTN_RIGHT))
