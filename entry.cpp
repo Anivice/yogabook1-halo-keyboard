@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <linux/uinput.h>
 #include <csignal>
+#include <mutex>
 #include <unistd.h>
 #include <chrono>
 #include <thread>
@@ -16,121 +17,184 @@
 #include <functional>
 #include <linux/kd.h>
 #include <sys/ioctl.h>
+#include <key_id.h>
 
-constexpr unsigned int dispatch_repeated_key_delay_ms = 70;
-constexpr unsigned int touchpad_mouse_region_id = 512;
-enum KeyAction { RELEASE_ALL_KEYS, KEY_COMBINATION_ONLY, KEY_PERSISTS_UNTIL_FN_RELEASE };
+enum KeyAction { KEY_COMBINATION_ONLY };
+
+// these keys are locked keys, locked keys are not released until one non-lockable key press
+// when forming a combination with normal keys, long press mode is disabled
 const std::map < const unsigned int, const KeyAction > SpecialKeys =
 {
-    { 464   /* Fn */,       RELEASE_ALL_KEYS },
+    // { 464   /* Fn */,       KEY_COMBINATION_ONLY },
     { 29    /* LCtrl */,    KEY_COMBINATION_ONLY },
-    { 125   /* Win */,      KEY_COMBINATION_ONLY },
+    //{ 125   /* Win */,      KEY_COMBINATION_ONLY },
     { 56    /* LAlt */,     KEY_COMBINATION_ONLY },
     { 100   /* RAlt */,     KEY_COMBINATION_ONLY },
     { 97    /* RCtrl */,    KEY_COMBINATION_ONLY },
     { 42    /* LShift */,   KEY_COMBINATION_ONLY },
-    { 54    /* RShift */,   KEY_PERSISTS_UNTIL_FN_RELEASE },
+    { 54    /* RShift */,   KEY_COMBINATION_ONLY },
+};
+
+const std::vector < unsigned int > keys_supporting_long_press = {
+    KEY_ID_SPACE,
+    KEY_ID_PGUP,
+    KEY_ID_UP,
+    KEY_ID_PGDN,
+    KEY_ID_LEFT,
+    KEY_ID_DOWN,
+    KEY_ID_RIGHT,
+    KEY_ID_Z,
+    KEY_ID_X,
+    KEY_ID_C,
+    KEY_ID_V,
+    KEY_ID_B,
+    KEY_ID_N,
+    KEY_ID_M,
+    KEY_ID_LESS,
+    KEY_ID_LARGER,
+    KEY_ID_QUESTION,
+    KEY_ID_A,
+    KEY_ID_S,
+    KEY_ID_D,
+    KEY_ID_F,
+    KEY_ID_G,
+    KEY_ID_H,
+    KEY_ID_J,
+    KEY_ID_K,
+    KEY_ID_L,
+    KEY_ID_SEMICOLON,
+    KEY_ID_DOUBLEQUOTE,
+    KEY_ID_ENTER,
+    KEY_ID_TAB,
+    KEY_ID_Q,
+    KEY_ID_W,
+    KEY_ID_E,
+    KEY_ID_R,
+    KEY_ID_T,
+    KEY_ID_Y,
+    KEY_ID_U,
+    KEY_ID_I,
+    KEY_ID_O,
+    KEY_ID_P,
+    KEY_ID_LEFTBRACE,
+    KEY_ID_RIGHTBRACE,
+    KEY_ID_BACKSLASH,
+    KEY_ID_GRAVE,
+    KEY_ID_1,
+    KEY_ID_2,
+    KEY_ID_3,
+    KEY_ID_4,
+    KEY_ID_5,
+    KEY_ID_6,
+    KEY_ID_7,
+    KEY_ID_8,
+    KEY_ID_9,
+    KEY_ID_0,
+    KEY_ID_MINUS,
+    KEY_ID_EQUAL,
+    KEY_ID_BACKSPACE,
+    KEY_ID_DELETE,
 };
 
 const std::map < const unsigned int, const std::string > key_id_to_str_translation_table =
 {
     // group 1
-    {464, "Fn"},
-    {29, "LCtrl"},
-    {125, "Win"},
-    {56, "LAlt"},
-    {57, "Space"},
-    {100, "RAlt"},
-    {97, "RCtrl"},
-    {104, "PgUp"},
-    {103, "Up"},
-    {109, "PgDn"},
+    { KEY_ID_FN, "Fn" },
+    { KEY_ID_LCTRL, "LCtrl" },
+    { KEY_ID_WIN, "Win" },
+    { KEY_ID_LALT, "LAlt" },
+    { KEY_ID_SPACE, "Space" },
+    { KEY_ID_RALT, "RAlt" },
+    { KEY_ID_RCTRL, "RCtrl" },
+    { KEY_ID_PGUP, "PgUp" },
+    { KEY_ID_UP, "Up" },
+    { KEY_ID_PGDN, "PgDn" },
     // + 3
-    {105, "Left"},
-    {108, "Down"},
-    {106, "Right"},
+    { KEY_ID_LEFT, "Left" },
+    { KEY_ID_DOWN, "Down" },
+    { KEY_ID_RIGHT, "Right" },
 
     // group 2
-    { 42, "LShift" },
-    { 44, "Z" },
-    { 45, "X" },
-    { 46, "C" },
-    { 47, "V" },
-    { 48, "B" },
-    { 49, "N" },
-    { 50, "M" },
-    { 51, "<," },
-    { 52, ">." },
-    { 53, "?/" },
-    { 54, "RShift" },
+    { KEY_ID_LSHIFT, "LShift" },
+    { KEY_ID_Z, "Z" },
+    { KEY_ID_X, "X" },
+    { KEY_ID_C, "C" },
+    { KEY_ID_V, "V" },
+    { KEY_ID_B, "B" },
+    { KEY_ID_N, "N" },
+    { KEY_ID_M, "M" },
+    { KEY_ID_LESS, "<," },
+    { KEY_ID_LARGER, ">." },
+    { KEY_ID_QUESTION, "?/" },
+    { KEY_ID_RSHIFT, "RShift" },
 
     // group 3
-    { 58, "CapsLock" },
-    { 30, "A" },
-    { 31, "S" },
-    { 32, "D" },
-    { 33, "F" },
-    { 34, "G" },
-    { 35, "H" },
-    { 36, "J" },
-    { 37, "K" },
-    { 38, "L" },
-    { 39, ":;" },
-    { 40, "\"\'" },
-    { 28, "Enter" },
+    { KEY_ID_CAPSLOCK, "CapsLock" },
+    { KEY_ID_A, "A" },
+    { KEY_ID_S, "S" },
+    { KEY_ID_D, "D" },
+    { KEY_ID_F, "F" },
+    { KEY_ID_G, "G" },
+    { KEY_ID_H, "H" },
+    { KEY_ID_J, "J" },
+    { KEY_ID_K, "K" },
+    { KEY_ID_L, "L" },
+    { KEY_ID_SEMICOLON, ":;" },
+    { KEY_ID_DOUBLEQUOTE, "\"\'" },
+    { KEY_ID_ENTER, "Enter" },
 
     // group 4
-    { 15, "Tab" },
-    { 16, "Q" },
-    { 17, "W" },
-    { 18, "E" },
-    { 19, "R" },
-    { 20, "T" },
-    { 21, "Y" },
-    { 22, "U" },
-    { 23, "I" },
-    { 24, "O" },
-    { 25, "P" },
-    { 26, "{[" },
-    { 27, "}]" },
-    { 43, "|\\" },
+    { KEY_ID_TAB, "Tab" },
+    { KEY_ID_Q, "Q" },
+    { KEY_ID_W, "W" },
+    { KEY_ID_E, "E" },
+    { KEY_ID_R, "R" },
+    { KEY_ID_T, "T" },
+    { KEY_ID_Y, "Y" },
+    { KEY_ID_U, "U" },
+    { KEY_ID_I, "I" },
+    { KEY_ID_O, "O" },
+    { KEY_ID_P, "P" },
+    { KEY_ID_LEFTBRACE, "{[" },
+    { KEY_ID_RIGHTBRACE, "}]" },
+    { KEY_ID_BACKSLASH, "|\\" },
 
     // group 5
-    { 41, "~`" },
-    { 2, "1" },
-    { 3, "2" },
-    { 4, "3" },
-    { 5, "4" },
-    { 6, "5" },
-    { 7, "6" },
-    { 8, "7" },
-    { 9, "8" },
-    { 10, "9" },
-    { 11, "0" },
-    { 12, "_-" },
-    { 13, "+=" },
-    { 14, "BackSpace" },
+    { KEY_ID_GRAVE, "~`" },
+    { KEY_ID_1, "1" },
+    { KEY_ID_2, "2" },
+    { KEY_ID_3, "3" },
+    { KEY_ID_4, "4" },
+    { KEY_ID_5, "5" },
+    { KEY_ID_6, "6" },
+    { KEY_ID_7, "7" },
+    { KEY_ID_8, "8" },
+    { KEY_ID_9, "9" },
+    { KEY_ID_0, "0" },
+    { KEY_ID_MINUS, "_-" },
+    { KEY_ID_EQUAL, "+=" },
+    { KEY_ID_BACKSPACE, "BackSpace" },
 
     // group 6
-    { 1, "ESC" },
-    { 59, "F1" },
-    { 60, "F2" },
-    { 61, "F3" },
-    { 62, "F4" },
-    { 63, "F5" },
-    { 64, "F6" },
-    { 65, "F7" },
-    { 66, "F8" },
-    { 67, "F9" },
-    { 68, "F10" },
-    { 87, "F11" },
-    { 88, "F12" },
-    { 111, "Delete" },
+    { KEY_ID_ESC, "ESC" },
+    { KEY_ID_F1, "F1" },
+    { KEY_ID_F2, "F2" },
+    { KEY_ID_F3, "F3" },
+    { KEY_ID_F4, "F4" },
+    { KEY_ID_F5, "F5" },
+    { KEY_ID_F6, "F6" },
+    { KEY_ID_F7, "F7" },
+    { KEY_ID_F8, "F8" },
+    { KEY_ID_F9, "F9" },
+    { KEY_ID_F10, "F10" },
+    { KEY_ID_F11, "F11" },
+    { KEY_ID_F12, "F12" },
+    { KEY_ID_DELETE, "Delete" },
 
     // group 7
-    { 272, "MouseLeft" },
-    { 273, "MouseRight" },
-    { touchpad_mouse_region_id, "TouchPad" },
+    { KEY_ID_MOUSELEFT, "MouseLeft" },
+    { KEY_ID_MOUSERIGHT, "MouseRight" },
+    { KEY_ID_TOUCHPAD, "TouchPad" },
 };
 
 volatile std::atomic_int ctrl_c = 0;
@@ -138,6 +202,8 @@ volatile std::atomic_int halo_device_fd = -1;
 using key_id_t = unsigned int;
 struct key_state_t {
     bool normal_press_handled = false;
+    bool press_down = false;
+    std::chrono::time_point<std::chrono::high_resolution_clock> press_event_reg_time;
 };
 
 std::mutex g_mutex;
@@ -198,19 +264,47 @@ bool if_capslock_enabled()
     close(fd);
 
     if (leds & LED_CAP) { /* LED_CAP == 0x04 */
-        // if (DEBUG) { debug::log("CapsLock reported as enabled\n"); }
         return true;
     }
 
-    // if (DEBUG) { debug::log("CapsLock reported as disabled\n"); }
     return false;
 }
 
 void emit_key_thread()
 {
     pthread_setname_np(pthread_self(), "VirKbd");
-    thread_local std::vector < unsigned int > combination_sp_keys;
-    thread_local std::vector < unsigned int > persistent_keys;
+
+    struct long_press_struct {
+        std::unique_ptr < std::atomic_bool > running;
+        std::thread thread;
+        key_id_t key{};
+    };
+    thread_local std::vector < long_press_struct > long_pressed_keys;
+
+    std::vector < unsigned int > combination_sp_keys;
+    std::mutex mutex_;
+
+    auto press_keys_once = [&](const key_id_t pressed_key)->void
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (DEBUG) {
+            debug::log("Executing key press "
+                "fn:", key_id_translate(combination_sp_keys),
+                " & ch:", key_id_translate(pressed_key), "\n");
+        }
+
+        for (const auto key_id : combination_sp_keys) {
+            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+        }
+        emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
+        emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+
+        for (const auto key_id : combination_sp_keys) {
+            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+        }
+        emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
+        emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+    };
 
     while (!ctrl_c)
     {
@@ -220,123 +314,91 @@ void emit_key_thread()
 
             for (auto & [key_id, state] : pressed_key)
             {
+                ///////////////////////////////////
+                /// KEY PRESS PROCESSING REGION ///
+                ///////////////////////////////////
                 if (!state.normal_press_handled)
                 {
-                    if (SpecialKeys.contains(key_id))
+                    if (state.press_down && SpecialKeys.contains(key_id))
                     {
                         const auto sp_key_id = SpecialKeys.at(key_id);
-                        if (sp_key_id == RELEASE_ALL_KEYS)
-                        {
-                            for (auto & _key : pressed_key | std::views::keys) {
-                                emit(vkbd_fd, EV_KEY, _key /* key code */, 0 /* release key */);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                invalid_keys.emplace_back(_key);
-                                if (DEBUG) debug::log("Released key ", key_id_translate(_key), "\n");
-                            }
-
-                            for (auto & _key : persistent_keys) {
-                                emit(vkbd_fd, EV_KEY, _key /* key code */, 0 /* release key */);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                if (DEBUG) debug::log("Released key ", key_id_translate(_key), "\n");
-                            }
-
-                            // check if CapsLock enabled on VT
-                            if (if_capslock_enabled())
-                            {
-                                emit(vkbd_fd, EV_KEY, KEY_CAPSLOCK, 1);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0);
-                                emit(vkbd_fd, EV_KEY, KEY_CAPSLOCK, 0);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0);
-                                if (DEBUG) debug::log("Released key ", key_id_translate(KEY_CAPSLOCK), "\n");
-                            }
-
-                            combination_sp_keys.clear();
-                            persistent_keys.clear();
-                            if (DEBUG) {
-                                debug::log("All keys are now released\n");
-                            }
-                            break; // stop processing rest of the keys
-                        }
-                        else if (sp_key_id == KEY_COMBINATION_ONLY)
+                        if (sp_key_id == KEY_COMBINATION_ONLY)
                         {
                             combination_sp_keys.push_back(key_id);
                             if (DEBUG) debug::log("Functional key ", key_id_translate(key_id), " registered\n");
                             state.normal_press_handled = true;
                         }
-                        else if (sp_key_id == KEY_PERSISTS_UNTIL_FN_RELEASE)
-                        {
-                            auto element = std::ranges::find(persistent_keys, key_id);
-                            if (element != std::ranges::end(persistent_keys))
-                            {
-                                emit(vkbd_fd, EV_KEY, *element /* key code */, 0 /* release key */);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                persistent_keys.erase(element);
-                                invalid_keys.emplace_back(key_id);
-                                if (DEBUG) {
-                                    debug::log("Persistent functional key ", key_id_translate(key_id), " released\n");
-                                }
-                            }
-                            else
-                            {
-                                persistent_keys.push_back(key_id);
-                                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                                state.normal_press_handled = true;
-                                invalid_keys.push_back(key_id);
-                                if (DEBUG) {
-                                    debug::log("Persistent functional key ", key_id_translate(key_id), " registered\n");
-                                }
-                            }
-                        }
                     }
-                    else
+                    /////////////////
+                    /// PRESS KEY ///
+                    /////////////////
+                    else if (state.press_down)
                     {
-                        if (DEBUG) {
-                            debug::log("Executing key combination "
-                                "fn:", key_id_translate(combination_sp_keys),
-                                " & ch:", key_id_translate(key_id), "\n");
-                        }
-
-                        if (!combination_sp_keys.empty())
-                        {
-                            if (DEBUG) debug::log("Normal key combination handler\n");
-                            // press combination
-                            for (const auto key : combination_sp_keys) {
-                                emit(vkbd_fd, EV_KEY, key /* key code */, 1 /* press down */);
-                            }
-                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-
-                            // release all keys
-                            for (const auto key : combination_sp_keys) {
-                                emit(vkbd_fd, EV_KEY, key /* key code */, 0);
-                            }
-                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0);
-                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-
-                            // clear all keys in the buffer
-                            for (const auto &_key: combination_sp_keys) {
-                                invalid_keys.push_back(_key);
-                            }
-                            invalid_keys.push_back(key_id);
-                            combination_sp_keys.clear();
-                            state.normal_press_handled = true;
-
-                            break; // this will abort processing all pending keys inside the cache, until slots are deleted
-                        } else {
-                            if (DEBUG) {
-                                debug::log("Normal key press ", key_id_translate(key_id),
-                                    " (persisted: ", key_id_translate(persistent_keys),
-                                    ", CapsLock=", if_capslock_enabled(), ")\n");
-                            }
-                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
-                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
-                            state.normal_press_handled = true;
-                            invalid_keys.push_back(key_id);
-                        }
+                        press_keys_once(key_id);
+                        state.normal_press_handled = true;
                     }
+                    ///////////////////
+                    /// RELEASE KEY ///
+                    ///////////////////
+                    else if(!state.press_down)
+                    {
+                        // remove key
+                        // is the key being long pressed?
+                        const auto it = std::ranges::find_if(long_pressed_keys,
+                            [&](const long_press_struct & ins_state)->bool { return ins_state.key == key_id; });
+                        if (it != long_pressed_keys.end()) { // found thread
+                            *it->running = false;
+                            if (it->thread.joinable()) {
+                                it->thread.join();
+                            }
+
+                            // !! delete reference !!, it is now INVALID
+                            std::erase_if(long_pressed_keys,
+                                [&](const long_press_struct & ins_state)->bool { return ins_state.key == key_id; });
+                        }
+
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        std::erase(combination_sp_keys, key_id);
+                        invalid_keys.push_back(key_id);
+                        state.normal_press_handled = true;
+                        if (DEBUG) debug::log("Key ", key_id_translate(key_id), " released\n");
+                    }
+                }
+
+                ////////////////////////////////////
+                /// LONG PRESS PROCESSING REGION ///
+                ////////////////////////////////////
+                if (const auto time_now = std::chrono::high_resolution_clock::now();
+                    // is initial key press already handled and still being pressed down?
+                    state.normal_press_handled && state.press_down
+                    // does this key actually support long press?
+                    && std::ranges::find(keys_supporting_long_press, key_id) != keys_supporting_long_press.end()
+                    // no handler actively running for this key
+                    && std::ranges::find_if(long_pressed_keys,
+                        [&](const long_press_struct & ins_state)->bool { return ins_state.key == key_id; }) == long_pressed_keys.end()
+                    // key pressed and escalated for more than 500ms?
+                    && (time_now - state.press_event_reg_time) > std::chrono::milliseconds(500))
+                {
+                    auto long_press_event_handler = [&](const std::atomic_bool * should_i_be_running)->void
+                    {
+                        if (DEBUG) pthread_setname_np(pthread_self(), ("Long Press " + key_id_translate(key_id)).c_str());
+                        else pthread_setname_np(pthread_self(), "Long Press");
+                        while (*should_i_be_running)
+                        {
+                            press_keys_once(key_id);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                        }
+                    };
+
+                    long_pressed_keys.emplace_back((long_press_struct){
+                        .running = std::make_unique<std::atomic_bool>(true),
+                        .key = key_id,
+                    });
+
+                    // create thread:
+                    long_pressed_keys.back().thread = std::thread(long_press_event_handler,
+                        long_pressed_keys.back().running.get());
+                    if (DEBUG) debug::log("Created thread for long press key ", key_id_translate(key_id), "\n");
                 }
             }
 
@@ -488,6 +550,8 @@ int main(int argc, char** argv)
         std::chrono::time_point<std::chrono::high_resolution_clock>
     > time_of_the_last_press_event;
 
+    std::map < unsigned int /* slot */, key_id_t > slot_to_key_id_map;
+
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     int next_id = 0;
@@ -545,10 +609,28 @@ int main(int argc, char** argv)
 
                 if (determined_key != -1 || type == LIBINPUT_EVENT_TOUCH_UP)
                 {
-                    if ((map.contains(BTN_LEFT) && x <= map.at(BTN_LEFT).key_pixel_bottom_right_x && x > 0)
-                        || type == LIBINPUT_EVENT_TOUCH_UP)
+                    // mouse event
+                    if ((determined_key == KEY_ID_MOUSELEFT || determined_key == KEY_ID_MOUSERIGHT || determined_key == KEY_ID_TOUCHPAD))
                     {
                         touchpad_mouse_handler(map, x, y, determined_key, mouse_fd, type, slot, touchpad_width, touchpad_height, next_id);
+                    }
+                    // key release
+                    else if (type == LIBINPUT_EVENT_TOUCH_UP)
+                    {
+                        const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1;
+                        if (DEBUG) {
+                            debug::log("Key ", key_id_translate(key_id),
+                                " (", key_id, ") "
+                                "release registered, slot=", slot, "\n");
+                        }
+
+                        std::lock_guard<std::mutex> lock(g_mutex);
+                        if (const auto it = pressed_key.find(key_id);
+                            it != pressed_key.end())
+                        {
+                            it->second.normal_press_handled = false;
+                            it->second.press_down = false;
+                        }
                     }
                     else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
                     {
@@ -576,6 +658,9 @@ int main(int argc, char** argv)
                             }
                             time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
                             pressed_key[determined_key].normal_press_handled = false;
+                            pressed_key[determined_key].press_down = true;
+                            pressed_key[determined_key].press_event_reg_time = time_of_the_last_press_event[determined_key];
+                            slot_to_key_id_map[slot] = determined_key;
                         }
                     }
                 }
