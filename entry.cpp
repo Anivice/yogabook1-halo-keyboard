@@ -19,10 +19,13 @@
 #include <sys/ioctl.h>
 #include <key_id.h>
 #include "execute_command.h"
+#include <filesystem>
+#include <system_error>
 
 constexpr unsigned int long_press_interval_ms = 80;
 volatile std::atomic_int ctrl_c = 0;
 volatile std::atomic_int halo_device_fd = -1;
+namespace fs = std::filesystem;
 using key_id_t = unsigned int;
 struct key_state_t {
     bool normal_press_handled = false;
@@ -441,6 +444,24 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
+    debug_log("Creating lock file...");
+    const fs::path LockFilePath = "/tmp/.HaloKeyboard.lock";
+    if (fs::exists(LockFilePath)) {
+        std::cerr << "\n[ERROR] Lock file exists. If you believe this is an error, remove the file /tmp/.HaloKeyboard.lock\n";
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        std::ofstream ofs(LockFilePath);
+        if (!ofs) {
+            std::cerr << "Failed to create lock file\n";
+            return EXIT_FAILURE;
+        }
+        ofs.close();
+        debug_log("done.\n");
+    }
+
+
     std::signal(SIGINT, sigint_handler);
 
     debug_log("Loading keymap...", '\n');
@@ -641,5 +662,10 @@ int main(int argc, char** argv)
         virtual_kbd_worker.join();
     }
 
+    debug_log("Removing lock file...");
+    if (!fs::remove(LockFilePath)) {
+        debug_log("\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
+    }
+    debug_log("done.\n");
     return EXIT_SUCCESS;
 }
