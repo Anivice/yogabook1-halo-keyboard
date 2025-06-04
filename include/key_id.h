@@ -98,6 +98,52 @@ constexpr unsigned int KEY_ID_MOUSELEFT  = 272;
 constexpr unsigned int KEY_ID_MOUSERIGHT = 273;
 constexpr unsigned int KEY_ID_TOUCHPAD   = 512;
 
+enum fn_inverted_keys:unsigned int {
+    INVERTED_KEY_FNLOCK = KEY_FN,
+    INVERTED_KEY_MUTE = KEY_MUTE,
+    INVERTED_KEY_VOLUMEDOWN = KEY_VOLUMEDOWN,
+    INVERTED_KEY_VOLUMEUP = KEY_VOLUMEUP,
+    INVERTED_KEY_AIRPLANEMODE = 0xFFFF02,
+    INVERTED_KEY_BRIGHTNESSDOWN = KEY_BRIGHTNESSDOWN,
+    INVERTED_KEY_BRIGHTNESSUP = KEY_BRIGHTNESSUP,
+    INVERTED_KEY_SEARCH = KEY_SEARCH,
+    INVERTED_KEY_SETTINGS = 0xFFFF01,
+    INVERTED_KEY_PREVIOUSSONG = KEY_PREVIOUSSONG,
+    INVERTED_KEY_PLAYPAUSE = KEY_PLAYPAUSE,
+    INVERTED_KEY_NEXTSONG = KEY_NEXTSONG,
+    INVERTED_KEY_PRINT = KEY_PRINT,
+};
+
+enum KeyAction { KEY_COMBINATION_ONLY };
+
+// these keys are locked keys, locked keys are not released until one non-lockable key press
+// when forming a combination with normal keys, long press mode is disabled
+const std::map < const unsigned int, const KeyAction > SpecialKeys =
+{
+    { KEY_ID_FN,       KEY_COMBINATION_ONLY },
+    { KEY_ID_LCTRL,    KEY_COMBINATION_ONLY },
+    // { 125   /* Win */,      KEY_COMBINATION_AND_NORMAL_PRESS },
+    { KEY_ID_LALT,     KEY_COMBINATION_ONLY },
+    { KEY_ID_RALT,     KEY_COMBINATION_ONLY },
+    { KEY_ID_RCTRL,    KEY_COMBINATION_ONLY },
+    { KEY_ID_LSHIFT,   KEY_COMBINATION_ONLY },
+    { KEY_ID_RSHIFT,   KEY_COMBINATION_ONLY },
+};
+
+const std::vector < unsigned int > keys_supporting_long_press = {
+    KEY_ID_SPACE, KEY_ID_PGUP, KEY_ID_UP, KEY_ID_PGDN, KEY_ID_LEFT, KEY_ID_DOWN, KEY_ID_RIGHT,
+    KEY_ID_Z, KEY_ID_X, KEY_ID_C, KEY_ID_V, KEY_ID_B, KEY_ID_N, KEY_ID_M,
+    KEY_ID_LESS, KEY_ID_LARGER, KEY_ID_QUESTION,
+    KEY_ID_A, KEY_ID_S, KEY_ID_D, KEY_ID_F, KEY_ID_G, KEY_ID_H, KEY_ID_J, KEY_ID_K, KEY_ID_L,
+    KEY_ID_SEMICOLON, KEY_ID_DOUBLEQUOTE, KEY_ID_ENTER, KEY_ID_TAB,
+    KEY_ID_Q, KEY_ID_W, KEY_ID_E, KEY_ID_R, KEY_ID_T, KEY_ID_Y, KEY_ID_U, KEY_ID_I, KEY_ID_O, KEY_ID_P,
+    KEY_ID_LEFTBRACE, KEY_ID_RIGHTBRACE, KEY_ID_BACKSLASH, KEY_ID_GRAVE,
+    KEY_ID_1, KEY_ID_2, KEY_ID_3, KEY_ID_4, KEY_ID_5, KEY_ID_6, KEY_ID_7, KEY_ID_8, KEY_ID_9, KEY_ID_0,
+    KEY_ID_MINUS, KEY_ID_EQUAL, KEY_ID_BACKSPACE,
+    KEY_ID_F1, KEY_ID_F2, KEY_ID_F3, KEY_ID_F4, KEY_ID_F5, KEY_ID_F6,
+    KEY_ID_F7, KEY_ID_F8, KEY_ID_F9, KEY_ID_F10, KEY_ID_F11, KEY_ID_F12, KEY_ID_DELETE,
+};
+
 #include <map>
 
 const std::map < const unsigned int, const std::string > key_id_to_str_translation_table =
@@ -194,6 +240,19 @@ const std::map < const unsigned int, const std::string > key_id_to_str_translati
     { KEY_ID_F11, "F11" },
     { KEY_ID_F12, "F12" },
     { KEY_ID_DELETE, "Delete" },
+
+    { INVERTED_KEY_MUTE,            "Mute" },
+    { INVERTED_KEY_VOLUMEDOWN,      "VolumeDown" },
+    { INVERTED_KEY_VOLUMEUP,        "VolumeUp" },
+    { INVERTED_KEY_AIRPLANEMODE,    "AirplaneMode" },
+    { INVERTED_KEY_BRIGHTNESSDOWN,  "BrightnessDown" },
+    { INVERTED_KEY_BRIGHTNESSUP,    "BrightnessUp" },
+    { INVERTED_KEY_SEARCH,          "Search" },
+    { INVERTED_KEY_SETTINGS,        "Settings" },
+    { INVERTED_KEY_PREVIOUSSONG,    "PreviousSong" },
+    { INVERTED_KEY_PLAYPAUSE,       "PlayPause" },
+    { INVERTED_KEY_NEXTSONG,        "Nextsong" },
+    { INVERTED_KEY_PRINT,           "Print" },
 
     // group 7
     { KEY_ID_MOUSELEFT, "MouseLeft" },

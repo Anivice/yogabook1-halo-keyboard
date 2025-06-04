@@ -38,6 +38,17 @@ int init_linux_input(const kbd_map & key_map)
     assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_END) != -1);
     assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SCROLLUP) != -1);
     assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SCROLLDOWN) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_FN) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_MUTE) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_VOLUMEDOWN) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_VOLUMEUP) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_BRIGHTNESSDOWN) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_BRIGHTNESSUP) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SEARCH) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PREVIOUSSONG) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PLAYPAUSE) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_NEXTSONG) != -1);
+    assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PRINT) != -1);
 
     /* 2.  Create the virtual device */
     uinput_setup usetup{};

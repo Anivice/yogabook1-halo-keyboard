@@ -20,52 +20,6 @@
 #include <key_id.h>
 
 constexpr unsigned int long_press_interval_ms = 80;
-
-enum KeyAction { KEY_COMBINATION_ONLY, FN_KEY_INVERT_MAP };
-
-// these keys are locked keys, locked keys are not released until one non-lockable key press
-// when forming a combination with normal keys, long press mode is disabled
-const std::map < const unsigned int, const KeyAction > SpecialKeys =
-{
-    // { 464   /* Fn */,       FN_KEY_INVERT_MAP }, TODO: Fn Key
-    { 29    /* LCtrl */,    KEY_COMBINATION_ONLY },
-    // { 125   /* Win */,      KEY_COMBINATION_AND_NORMAL_PRESS },
-    { 56    /* LAlt */,     KEY_COMBINATION_ONLY },
-    { 100   /* RAlt */,     KEY_COMBINATION_ONLY },
-    { 97    /* RCtrl */,    KEY_COMBINATION_ONLY },
-    { 42    /* LShift */,   KEY_COMBINATION_ONLY },
-    { 54    /* RShift */,   KEY_COMBINATION_ONLY },
-};
-
-const std::vector < unsigned int > keys_supporting_long_press = {
-    KEY_ID_SPACE, KEY_ID_PGUP, KEY_ID_UP, KEY_ID_PGDN, KEY_ID_LEFT, KEY_ID_DOWN, KEY_ID_RIGHT,
-    KEY_ID_Z, KEY_ID_X, KEY_ID_C, KEY_ID_V, KEY_ID_B, KEY_ID_N, KEY_ID_M,
-    KEY_ID_LESS, KEY_ID_LARGER, KEY_ID_QUESTION,
-    KEY_ID_A, KEY_ID_S, KEY_ID_D, KEY_ID_F, KEY_ID_G, KEY_ID_H, KEY_ID_J, KEY_ID_K, KEY_ID_L,
-    KEY_ID_SEMICOLON, KEY_ID_DOUBLEQUOTE, KEY_ID_ENTER, KEY_ID_TAB,
-    KEY_ID_Q, KEY_ID_W, KEY_ID_E, KEY_ID_R, KEY_ID_T, KEY_ID_Y, KEY_ID_U, KEY_ID_I, KEY_ID_O, KEY_ID_P,
-    KEY_ID_LEFTBRACE, KEY_ID_RIGHTBRACE, KEY_ID_BACKSLASH, KEY_ID_GRAVE,
-    KEY_ID_1, KEY_ID_2, KEY_ID_3, KEY_ID_4, KEY_ID_5, KEY_ID_6, KEY_ID_7, KEY_ID_8, KEY_ID_9, KEY_ID_0,
-    KEY_ID_MINUS, KEY_ID_EQUAL, KEY_ID_BACKSPACE, KEY_ID_DELETE,
-};
-
-// FIXME: This invert map might be inaccurate and should be specific
-const std::map < key_t, key_t > fn_key_invert_map = {
-    { KEY_ID_ESC, KEY_FN_ESC },
-         { KEY_ID_F1, KEY_FN_F1 },
-         { KEY_ID_F2, KEY_FN_F2 },
-         { KEY_ID_F3, KEY_FN_F3 },
-         { KEY_ID_F4, KEY_FN_F4 },
-         { KEY_ID_F5, KEY_FN_F5 },
-         { KEY_ID_F6, KEY_FN_F6 },
-         { KEY_ID_F7, KEY_FN_F7 },
-         { KEY_ID_F8, KEY_FN_F8 },
-         { KEY_ID_F9, KEY_FN_F9 },
-         { KEY_ID_F10, KEY_FN_F10 },
-         { KEY_ID_F11, KEY_FN_F11 },
-         { KEY_ID_F12, KEY_FN_F12 },
-};
-
 volatile std::atomic_int ctrl_c = 0;
 volatile std::atomic_int halo_device_fd = -1;
 using key_id_t = unsigned int;
@@ -75,13 +29,38 @@ struct key_state_t {
     std::chrono::time_point<std::chrono::high_resolution_clock> press_event_reg_time;
 };
 
+std::atomic_bool fnlock = true;
 std::mutex g_mutex;
 std::map < key_id_t, key_state_t > pressed_key;
 std::atomic_int vkbd_fd (-1);
+std::atomic_bool fnlock_enabled = false;
+
+typedef void(*inverted_key_map_handler)(key_id_t);
+void fn_lock(key_id_t);
+void normal_key_emit(key_id_t);
+void settings(key_id_t);
+void airplane_mode(key_id_t);
+
+const std::map < key_id_t, std::pair <key_id_t, inverted_key_map_handler> >
+fn_key_invert_handler_map = {
+    { KEY_ID_ESC, {INVERTED_KEY_FNLOCK,         fn_lock} },
+    { KEY_ID_F1,  {INVERTED_KEY_MUTE,           normal_key_emit} },
+    { KEY_ID_F2,  {INVERTED_KEY_VOLUMEDOWN,     normal_key_emit} },
+    { KEY_ID_F3,  {INVERTED_KEY_VOLUMEUP,       normal_key_emit} },
+    { KEY_ID_F4,  {INVERTED_KEY_AIRPLANEMODE,   airplane_mode} },
+    { KEY_ID_F5,  {INVERTED_KEY_BRIGHTNESSDOWN, normal_key_emit} },
+    { KEY_ID_F6,  {INVERTED_KEY_BRIGHTNESSUP,   normal_key_emit} },
+    { KEY_ID_F7,  {INVERTED_KEY_SEARCH,         normal_key_emit} },
+    { KEY_ID_F8,  {INVERTED_KEY_SETTINGS,       settings} },
+    { KEY_ID_F9,  {INVERTED_KEY_PREVIOUSSONG,   normal_key_emit} },
+    { KEY_ID_F10, {INVERTED_KEY_PLAYPAUSE,      normal_key_emit} },
+    { KEY_ID_F11, {INVERTED_KEY_NEXTSONG,       normal_key_emit} },
+    { KEY_ID_F12, {INVERTED_KEY_PRINT,          normal_key_emit} },
+};
 
 void sigint_handler(int)
 {
-    debug::log("Stopping...\n");
+    debug_log("Stopping...\n");
     ctrl_c = 1;
     if (halo_device_fd != -1) {
         close(halo_device_fd);
@@ -139,6 +118,30 @@ bool if_capslock_enabled()
     return false;
 }
 
+void fn_lock(const key_id_t)
+{
+    fnlock_enabled = !fnlock_enabled;
+    if (DEBUG) debug_log("Fn ", fnlock_enabled ? "" : "Un", "locked\n");
+}
+
+void normal_key_emit(const key_id_t key_id)
+{
+    emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+    emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+}
+
+void settings(const key_id_t)
+{
+    if (DEBUG) debug_log("XDG launch Settings\n");
+}
+
+void airplane_mode(const key_id_t)
+{
+    if (DEBUG) debug_log("XDG setting Airplane Mode\n");
+}
+
 void emit_key_thread()
 {
     pthread_setname_np(pthread_self(), "VirKbd");
@@ -156,23 +159,47 @@ void emit_key_thread()
     auto press_keys_once = [&](const key_id_t pressed_key)->void
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (DEBUG) {
-            debug::log("Executing key press "
-                "fn:", key_id_translate(combination_sp_keys),
-                " & ch:", key_id_translate(pressed_key), "\n");
-        }
+        if (fn_key_invert_handler_map.contains(pressed_key))
+        {
+            if (DEBUG) debug_log("Fn governed key ", key_id_translate(pressed_key), " pressed, Fn is ",
+                (std::ranges::find(combination_sp_keys, KEY_ID_FN) != combination_sp_keys.end() ? "" : "NOT "),
+                "present within the key combination\n");
+            // check if Fn Lock and Fn key presence within combinations
+            bool do_i_invert = fnlock_enabled;
+            do_i_invert = std::ranges::find(combination_sp_keys, KEY_ID_FN) != combination_sp_keys.end()
+                ? !do_i_invert : do_i_invert;
 
-        for (const auto key_id : combination_sp_keys) {
-            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+            if (do_i_invert) {
+                const auto [inverted_key_id, handler] = fn_key_invert_handler_map.at(pressed_key);
+                if (DEBUG) debug_log("Pressing down ", key_id_translate(inverted_key_id), "\n");
+                handler(inverted_key_id);
+            } else { // just press the corresponding key
+                if (DEBUG) debug_log("Pressing down ", key_id_translate(pressed_key), "\n");
+                emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
+                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
+                emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+            }
         }
-        emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
-        emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+        else
+        {
+            if (DEBUG) {
+                debug_log("Executing key press cb:", key_id_translate(combination_sp_keys),
+                    " & ch:", key_id_translate(pressed_key), ", fn:", fnlock_enabled, "\n");
+            }
 
-        for (const auto key_id : combination_sp_keys) {
-            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+            }
+            emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
+            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+            }
+            emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
+            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
         }
-        emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
-        emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
     };
 
     while (!ctrl_c)
@@ -194,7 +221,7 @@ void emit_key_thread()
                         if (sp_key_id == KEY_COMBINATION_ONLY)
                         {
                             combination_sp_keys.push_back(key_id);
-                            if (DEBUG) debug::log("Functional key ", key_id_translate(key_id), " registered\n");
+                            if (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " registered\n");
                             state.normal_press_handled = true;
                         }
                     }
@@ -239,7 +266,7 @@ void emit_key_thread()
                         std::erase(combination_sp_keys, key_id); // this will delete WIN as well
                         invalid_keys.push_back(key_id);
                         state.normal_press_handled = true;
-                        if (DEBUG) debug::log("Key ", key_id_translate(key_id), " released\n");
+                        if (DEBUG) debug_log("Key ", key_id_translate(key_id), " released\n");
                     }
                 }
 
@@ -276,7 +303,7 @@ void emit_key_thread()
                     // create thread:
                     long_pressed_keys.back().thread = std::thread(long_press_event_handler,
                         long_pressed_keys.back().running.get());
-                    if (DEBUG) debug::log("Created thread for long press key ", key_id_translate(key_id), "\n");
+                    if (DEBUG) debug_log("Created thread for long press key ", key_id_translate(key_id), "\n");
                 }
             }
 
@@ -288,7 +315,7 @@ void emit_key_thread()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    debug::log("Shutting down virtual keyboard...\n");
+    debug_log("Shutting down virtual keyboard...\n");
 }
 
 void touchpad_mouse_handler(const kbd_map & map,
@@ -307,7 +334,7 @@ void touchpad_mouse_handler(const kbd_map & map,
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
         emit(mouse_fd, EV_KEY, determined_key, 0);
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
-        if (DEBUG) { debug::log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
+        if (DEBUG) { debug_log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
     }
     else if (determined_key == 512 || type == LIBINPUT_EVENT_TOUCH_UP)
     {
@@ -347,7 +374,7 @@ void touchpad_mouse_handler(const kbd_map & map,
         /* 3. flush the packet */
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0);
 
-        if (DEBUG) { debug::log("TouchPad movement (", x, ", ", y, ") "
+        if (DEBUG) { debug_log("TouchPad movement (", x, ", ", y, ") "
             "mapped to (", new_x, ", ", new_y, "), slot=", slot, "\n"); }
     }
 }
@@ -375,31 +402,33 @@ int main(int argc, char** argv)
 
     std::signal(SIGINT, sigint_handler);
 
+    debug_log("Loading keymap...", '\n');
+
     // read key map
-    debug::log("Loading keymap...");
+    debug_log("Loading keymap...");
     std::ifstream ifs(argv[1]);
     if (!ifs.is_open()) {
         std::cerr << "Unable to open file" << std::endl;
         return EXIT_FAILURE;
     }
     const auto map = read_key_map(ifs);
-    debug::log("done.\n");
+    debug_log("done.\n");
 
     // init linux input
-    debug::log("Initializing Linux input interface for virtual keyboard...");
+    debug_log("Initializing Linux input interface for virtual keyboard...");
     vkbd_fd = init_linux_input(map);
-    debug::log("done.\n");
+    debug_log("done.\n");
 
-    debug::log("Initializing Linux input interface for virtual mouse...");
+    debug_log("Initializing Linux input interface for virtual mouse...");
     int mouse_fd = init_linux_mouse_input();
-    debug::log("done.\n");
+    debug_log("done.\n");
 
     // load keyboard touchpad
     libinput *li = nullptr;
-    debug::log("Initializing Halo keyboard input interface...");
+    debug_log("Initializing Halo keyboard input interface...");
 
     // 1. create libinput context
-    if (DEBUG) debug::log("\n    Creating udev and libinput context...\n");
+    if (DEBUG) debug_log("\n    Creating udev and libinput context...\n");
     udev *udev = udev_new();
     li = libinput_udev_create_context(&interface, nullptr, udev);
     if (!li) {
@@ -408,21 +437,21 @@ int main(int argc, char** argv)
     }
 
     // 2. assign seat
-    if (DEBUG) debug::log("    Assigning seat to seat0...\n");
+    if (DEBUG) debug_log("    Assigning seat to seat0...\n");
     assert_throw(libinput_udev_assign_seat(li, "seat0") == 0);
-    if (DEBUG) debug::log("    Export file descriptor...\n");
+    if (DEBUG) debug_log("    Export file descriptor...\n");
     halo_device_fd = libinput_get_fd(li);
-    if (DEBUG) debug::log("    => File descriptor for device input is ", halo_device_fd, "\n");
-    debug::log("done.\n");
+    if (DEBUG) debug_log("    => File descriptor for device input is ", halo_device_fd, "\n");
+    debug_log("done.\n");
 
     // start virtual keyboard handling thread
-    debug::log("Initializing virtual keyboard...");
+    debug_log("Initializing virtual keyboard...");
     std::thread virtual_kbd_worker(emit_key_thread);
-    debug::log("done.\n");
+    debug_log("done.\n");
 
     pollfd pfd = { halo_device_fd, POLLIN, 0 };
 
-    debug::log("Main loop started, end handler by sending SIGINT(2) to current process (pid=", getpid(), ").\n");
+    debug_log("Main loop started, end handler by sending SIGINT(2) to current process (pid=", getpid(), ").\n");
 
     std::map < key_id_t /* key */,
         std::chrono::time_point<std::chrono::high_resolution_clock>
@@ -463,7 +492,7 @@ int main(int argc, char** argv)
                 const char *name = libinput_device_get_name(dev);
                 if (vendor != 1046 || product != 9110) {
                     if (DEBUG) {
-                        debug::log("Device ", name, " (", vendor, ":", product, ") not recognized as Halo keyboard, ignored\n");
+                        debug_log("Device ", name, " (", vendor, ":", product, ") not recognized as Halo keyboard, ignored\n");
                     }
                     continue; // skipped the loop
                 }
@@ -488,16 +517,29 @@ int main(int argc, char** argv)
                 if (determined_key != -1 || type == LIBINPUT_EVENT_TOUCH_UP)
                 {
                     // mouse event
-                    if ((determined_key == KEY_ID_MOUSELEFT || determined_key == KEY_ID_MOUSERIGHT || determined_key == KEY_ID_TOUCHPAD))
+                    if ((determined_key == KEY_ID_MOUSELEFT
+                        || determined_key == KEY_ID_MOUSERIGHT
+                        || determined_key == KEY_ID_TOUCHPAD)
+                        || (type == LIBINPUT_EVENT_TOUCH_UP && slot_to_key_id_map.contains(slot)
+                            && (slot_to_key_id_map.at(slot) == KEY_ID_MOUSELEFT
+                                || slot_to_key_id_map.at(slot) == KEY_ID_MOUSERIGHT
+                                || slot_to_key_id_map.at(slot) == KEY_ID_TOUCHPAD)
+                        ))
                     {
+                        if (type == LIBINPUT_EVENT_TOUCH_UP) {
+                            if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
+                        } else {
+                            slot_to_key_id_map.emplace(slot, determined_key);
+                        }
                         touchpad_mouse_handler(map, x, y, determined_key, mouse_fd, type, slot, touchpad_width, touchpad_height, next_id);
                     }
                     // key release
                     else if (type == LIBINPUT_EVENT_TOUCH_UP)
                     {
                         const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1;
+                        if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
                         if (DEBUG) {
-                            debug::log("Key ", key_id_translate(key_id),
+                            debug_log("Key ", key_id_translate(key_id),
                                 " (", key_id, ") "
                                 "release registered, slot=", slot, "\n");
                         }
@@ -530,7 +572,7 @@ int main(int argc, char** argv)
                         if (!pressed_key.contains(determined_key))
                         {
                             if (DEBUG) {
-                                debug::log("Key ", key_id_translate(determined_key),
+                                debug_log("Key ", key_id_translate(determined_key),
                                     " (", determined_key, ") "
                                     "press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
                             }
@@ -543,7 +585,7 @@ int main(int argc, char** argv)
                     }
                 }
                 else if (DEBUG) {
-                    debug::log("Key pressed but no key associated with this location in key map. "
+                    debug_log("Key pressed but no key associated with this location in key map. "
                         "axisCoordinates=(1920x2400, ", x, ", ", y, ")\n");
                 }
                 // Release is NOT processed. This is a typewriter and once key is pressed down, it is released automatically

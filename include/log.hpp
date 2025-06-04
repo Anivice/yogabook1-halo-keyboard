@@ -27,6 +27,14 @@
 #include <unordered_map>
 #include <atomic>
 #include <iomanip>
+#ifdef DEBUG
+#   include <vector>
+#   include <tuple>      // for std::tuple, std::make_tuple
+#   include <utility>    // for std::forward
+#   include <any>
+#   include <cstring>
+#   include <regex>
+#endif
 
 #define construct_simple_type_compare(type)                             \
     template <typename T>                                               \
@@ -153,9 +161,9 @@ namespace debug {
         {
             if (num_elements == max_elements)
             {
-                num_elements = 0;
                 std::cerr << "\n";
-                _log("    "); break;
+                _log("    ");
+                num_elements = 0;
             }
 
             if (sizeof(*it) == 1 /* 8bit data width */)
@@ -243,11 +251,56 @@ namespace debug {
         (_log(args), ...);
     }
 
-    template <typename... Args> void log(const Args &...args)
+#ifdef DEBUG
+    extern bool do_i_show_caller_next_time;
+
+    template <typename... Args> void log(const char * caller, const Args &...args)
     {
         std::lock_guard<std::mutex> lock(log_mutex);
-        debug::_log(args...);
+        static_assert(sizeof...(Args) > 0, "log(...) requires at least one argument");
+        auto ref_tuple = std::forward_as_tuple(args...);
+        using LastType = std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>;
+        const std::any last_arg = std::get<sizeof...(Args) - 1>(ref_tuple);
+
+        if (do_i_show_caller_next_time) {
+            _log("[", caller, "] ");
+        }
+
+        // FIXME: this is an extremely ugly workaround. DON'T DO THIS
+        // only show called if last element is some form of string type and has '\n'
+        if (std::regex_match(typeid(LastType).name(), std::regex(R"(.*basic_string.*)")))
+        {
+            if (const auto str = std::any_cast<const std::string &>(last_arg); !str.empty()) {
+                do_i_show_caller_next_time = str[str.size() - 1] == '\n';
+            }
+        }
+        else if (std::regex_match(typeid(LastType).name(), std::regex(R"(A[\d]+\_c)")))
+        {
+            if (const auto str = std::any_cast<const char*>(last_arg); std::strlen(str) > 0) {
+                do_i_show_caller_next_time = str[std::strlen(str) - 1] == '\n';
+            }
+        }
+        else if (std::is_same_v<LastType, char>
+            || std::is_same_v<LastType, const char>
+            || std::is_same_v<LastType, const char&>)
+        {
+            const auto last_char = std::any_cast<char>(last_arg);
+            do_i_show_caller_next_time = last_char == '\n';
+        } else {
+            do_i_show_caller_next_time = false;
+        }
+#else
+    template <typename... Args> void log(const Args &...args)
+    {
+#endif
+        _log(args...);
     }
 }
+
+#if defined(DEBUG)
+#define debug_log(...) ::debug::log(__FUNCTION__, __VA_ARGS__)
+#else
+#define debug_log(...) ::debug::log(__VA_ARGS__)
+#endif
 
 #endif // LOG_HPP
