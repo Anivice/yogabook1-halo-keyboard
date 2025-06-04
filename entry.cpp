@@ -435,6 +435,7 @@ static const libinput_interface interface =
 
 int main(int argc, char** argv)
 {
+    debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "]\n");
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <map_file>" << std::endl;
         return EXIT_FAILURE;
@@ -576,20 +577,18 @@ int main(int argc, char** argv)
                     // key release
                     else if (type == LIBINPUT_EVENT_TOUCH_UP)
                     {
-                        const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1;
-                        if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
-                        if (DEBUG) {
-                            debug_log("Key ", key_id_translate(key_id),
-                                " (", key_id, ") "
-                                "release registered, slot=", slot, "\n");
-                        }
-
-                        std::lock_guard<std::mutex> lock(g_mutex);
-                        if (const auto it = pressed_key.find(key_id);
-                            it != pressed_key.end())
+                        if (const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1; key_id != -1)
                         {
-                            it->second.normal_press_handled = false;
-                            it->second.press_down = false;
+                            if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
+                            if (DEBUG) debug_log("Key ", key_id_translate(key_id), " (", key_id, ") release registered, slot=", slot, "\n");
+
+                            std::lock_guard<std::mutex> lock(g_mutex);
+                            if (const auto it = pressed_key.find(key_id);
+                                it != pressed_key.end())
+                            {
+                                it->second.normal_press_handled = false;
+                                it->second.press_down = false;
+                            }
                         }
                     }
                     else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
@@ -613,8 +612,7 @@ int main(int argc, char** argv)
                         {
                             if (DEBUG) {
                                 debug_log("Key ", key_id_translate(determined_key),
-                                    " (", determined_key, ") "
-                                    "press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
+                                    " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
                             }
                             time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
                             pressed_key[determined_key].normal_press_handled = false;

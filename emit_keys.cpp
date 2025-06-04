@@ -15,7 +15,7 @@ void emit(const int fd, const uint16_t type, const uint16_t code, const int32_t 
     ev.code = code;
     ev.value = value;
     gettimeofday(&ev.time, nullptr);
-    write(fd, &ev, sizeof(ev));
+    assert_throw(write(fd, &ev, sizeof(ev)) == sizeof(ev));
 }
 
 int init_linux_input(const kbd_map & key_map)
@@ -69,25 +69,27 @@ int init_linux_mouse_input()
     if (ufd < 0) throw std::runtime_error("open /dev/uinput failed");
 
     /* event & key capability bits */
-    ioctl(ufd, UI_SET_EVBIT, EV_KEY);
-    ioctl(ufd, UI_SET_EVBIT, EV_ABS);
-    ioctl(ufd, UI_SET_EVBIT, EV_SYN);
+    assert_throw(ioctl(ufd, UI_SET_EVBIT, EV_KEY) != -1);
+    assert_throw(ioctl(ufd, UI_SET_EVBIT, EV_ABS) != -1);
+    assert_throw(ioctl(ufd, UI_SET_EVBIT, EV_SYN) != -1);
 
-    ioctl(ufd, UI_SET_KEYBIT, BTN_LEFT);
-    ioctl(ufd, UI_SET_KEYBIT, BTN_RIGHT);
-    ioctl(ufd, UI_SET_KEYBIT, BTN_TOUCH);          /* REQUIRED */
-    ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_FINGER);    /* REQUIRED */
-    ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_DOUBLETAP); /* optional extras */
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_LEFT) != -1);
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_RIGHT) != -1);
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_TOUCH) != -1);          /* REQUIRED */
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_FINGER) != -1);    /* REQUIRED */
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_DOUBLETAP) != -1); // 2-finger
+    assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_TRIPLETAP) != -1); // 3-finger, required by some gestures in desktop
+    // assert_throw(ioctl(ufd, UI_SET_KEYBIT, BTN_TOOL_QUADTAP) != -1);   // 4 finger
 
-    ioctl(ufd, UI_SET_ABSBIT, ABS_MT_SLOT);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_MT_POSITION_X);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_MT_POSITION_Y);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_MT_PRESSURE);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_X);
-    ioctl(ufd, UI_SET_ABSBIT, ABS_Y);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_MT_SLOT) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_MT_POSITION_X) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_MT_POSITION_Y) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_MT_PRESSURE) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_X) != -1);
+    assert_throw(ioctl(ufd, UI_SET_ABSBIT, ABS_Y) != -1);
 
-    ioctl(ufd, UI_SET_PROPBIT, INPUT_PROP_POINTER); /* identify as touchpad */
+    assert_throw(ioctl(ufd, UI_SET_PROPBIT, INPUT_PROP_POINTER) != -1); /* identify as touchpad */
 
     /* device ID/name */
     struct uinput_setup us = {};
@@ -95,7 +97,7 @@ int init_linux_mouse_input()
     us.id.vendor  = 0x91cb;
     us.id.product = 0x91cb;
     strcpy(us.name, "Halo TouchPad");
-    ioctl(ufd, UI_DEV_SETUP, &us);
+    assert_throw(ioctl(ufd, UI_DEV_SETUP, &us) != -1);
 
     uinput_abs_setup abs = { };
 
@@ -104,26 +106,26 @@ int init_linux_mouse_input()
     abs.absinfo.minimum = 0;
     abs.absinfo.maximum = 9;          /* advertise 10 fingers */
     abs.absinfo.value   = -1; // avoid slot == 0 causing mask
-    ioctl(ufd, UI_ABS_SETUP, &abs);
+    assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
     std::memset(&abs, 0, sizeof(abs));
 
     abs.code = ABS_MT_TRACKING_ID;
     abs.absinfo.minimum = 0;
     abs.absinfo.maximum = 65535;
-    ioctl(ufd, UI_ABS_SETUP, &abs);
+    assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
 
     /* ----- X/Y ranges you already had ----- */
     abs.code = ABS_MT_POSITION_X; abs.absinfo.minimum = 0; abs.absinfo.maximum = 1279;
-    ioctl(ufd, UI_ABS_SETUP, &abs);
+    assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
     abs.code = ABS_MT_POSITION_Y; abs.absinfo.maximum = 799;
-    ioctl(ufd, UI_ABS_SETUP, &abs);
-    abs.code = ABS_X;  abs.absinfo.maximum = 1279; ioctl(ufd, UI_ABS_SETUP, &abs);
-    abs.code = ABS_Y;  abs.absinfo.maximum = 799;  ioctl(ufd, UI_ABS_SETUP, &abs);
+    assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
+    abs.code = ABS_X;  abs.absinfo.maximum = 1279; assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
+    abs.code = ABS_Y;  abs.absinfo.maximum = 799;  assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
 
     /* ----- pressure (safe 0-255 span) ----- */
     abs.code = ABS_MT_PRESSURE; abs.absinfo.minimum = 0; abs.absinfo.maximum = 255;
-    ioctl(ufd, UI_ABS_SETUP, &abs);
-    abs.code = ABS_PRESSURE; ioctl(ufd, UI_ABS_SETUP, &abs);
+    assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
+    abs.code = ABS_PRESSURE; assert_throw(ioctl(ufd, UI_ABS_SETUP, &abs) != -1);
 
     if (ioctl(ufd, UI_DEV_CREATE) == -1)
         throw std::runtime_error("UI_DEV_CREATE failed");

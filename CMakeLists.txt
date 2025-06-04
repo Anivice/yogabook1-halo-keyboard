@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.30)
 project(HaloKeyboard CXX)
 set(CMAKE_CXX_STANDARD 23)
 
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 #    add_compile_options(-fsanitize=thread -fsanitize=undefined -g3 -O0)
 #    add_link_options(-lubsan -ltsan)
     add_compile_definitions(DEBUG=1)
@@ -21,6 +21,35 @@ else ()
     add_compile_options(${OPTIMIZERS})
     add_link_options(${OPTIMIZERS})
 endif ()
+
+execute_process(
+        COMMAND bash -c "echo $(dd if=/dev/random bs=32 count=1 2>/dev/null | xxd | xz | sha512sum | head -c 8)"
+        OUTPUT_VARIABLE BUILD_ID_PREFIX
+)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+    set(BUILD_ID_PREFIX "__${BUILD_ID_PREFIX}DEBUG")
+endif ()
+
+execute_process(
+        COMMAND bash -c "echo $(date '+%s'):$(date '+%Y%m%d%H%M%S')"
+        OUTPUT_VARIABLE BUILD_ID_TIMESTAMP
+)
+
+execute_process(
+        COMMAND bash -c "echo $(git log | head -n 1 | awk '{print $2}' | head -c 12)"
+        OUTPUT_VARIABLE BUILD_ID_GIT_HEAD
+)
+
+execute_process(
+        COMMAND bash -c "echo $(date '+%Y-%m-%d %H:%M:%S')"
+        OUTPUT_VARIABLE BUILD_TIME
+)
+
+add_compile_definitions(
+        BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
+        BUILD_TIME="${BUILD_TIME}"
+)
 
 include_directories(include)
 add_executable(halo_kbd
