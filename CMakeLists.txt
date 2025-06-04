@@ -29,5 +29,7 @@ add_executable(halo_kbd
         include/log.hpp log.cpp
         include/map_reader.h
         include/emit_keys.h
-        include/key_id.h)
+        include/key_id.h
+        include/execute_command.h
+        execute_command.cpp)
 target_link_libraries(halo_kbd PRIVATE input udev)

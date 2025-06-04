@@ -18,6 +18,7 @@
 #include <linux/kd.h>
 #include <sys/ioctl.h>
 #include <key_id.h>
+#include "execute_command.h"
 
 constexpr unsigned int long_press_interval_ms = 80;
 volatile std::atomic_int ctrl_c = 0;
@@ -132,14 +133,30 @@ void normal_key_emit(const key_id_t key_id)
     emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
 }
 
+std::vector<std::thread> xdg_thread_pool;
+
 void settings(const key_id_t)
 {
-    if (DEBUG) debug_log("XDG launch Settings\n");
+    if (DEBUG) debug_log("Launch System Settings\n");
+    auto xdg_launch_settings = []()->void
+    {
+        exec_command("/usr/bin/env", "", "bash", "-c",
+            "/usr/bin/machinectl shell "
+            "--uid=1000 --setenv=XDG_RUNTIME_DIR=/run/user/1000 "
+            "--setenv=WAYLAND_DISPLAY=wayland-0 "
+            "--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+            "--setenv=KDE_SESSION_VERSION=6 "
+            "--setenv=KDE_FULL_SESSION=true \"$(id -un 1000)\"@ "
+            "/usr/bin/systemsettings &");
+    };
+
+    xdg_thread_pool.emplace_back(xdg_launch_settings);
 }
 
 void airplane_mode(const key_id_t)
 {
     if (DEBUG) debug_log("XDG setting Airplane Mode\n");
+    debug_log("[WARNING] Toggling Airplane Mode not implemented and possibly never plan to. This key lacks practical purpose.\n");
 }
 
 void emit_key_thread()
@@ -152,7 +169,7 @@ void emit_key_thread()
         key_id_t key{};
     };
     thread_local std::vector < long_press_struct > long_pressed_keys;
-
+    std::atomic_bool no_key_pressed_after_win = false;
     std::vector < unsigned int > combination_sp_keys;
     std::mutex mutex_;
 
@@ -233,7 +250,11 @@ void emit_key_thread()
                         if (key_id == KEY_ID_WIN) {
                             std::lock_guard local_guard(mutex_);
                             combination_sp_keys.push_back(KEY_ID_WIN);
+                            no_key_pressed_after_win = true;
                         } else {
+                            if (no_key_pressed_after_win) {
+                                no_key_pressed_after_win = false;
+                            }
                             press_keys_once(key_id);
                         }
                         state.normal_press_handled = true;
@@ -258,8 +279,9 @@ void emit_key_thread()
                                 [&](const long_press_struct & ins_state)->bool { return ins_state.key == key_id; });
                         }
 
-                        if (key_id == KEY_ID_WIN) {
+                        if (key_id == KEY_ID_WIN && no_key_pressed_after_win) {
                             press_keys_once(KEY_ID_WIN); // now we press win
+                            no_key_pressed_after_win = false;
                         }
 
                         std::lock_guard<std::mutex> lock(mutex_);
@@ -315,7 +337,25 @@ void emit_key_thread()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    debug_log("Shutting down virtual keyboard...\n");
+    debug_log("Shutting down virtual keyboard...");
+
+    // shut down any unfinished threads
+    for (auto & thread : long_pressed_keys)
+    {
+        *thread.running = false;
+        if (thread.thread.joinable()) {
+            thread.thread.join();
+        }
+    }
+
+    for (auto & thread : xdg_thread_pool)
+    {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    debug_log("done.\n");
 }
 
 void touchpad_mouse_handler(const kbd_map & map,
