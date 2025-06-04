@@ -16,6 +16,7 @@ else ()
             -fdata-sections -ffunction-sections
             -D_FORTIFY_SOURCE=2 -fstack-protector-strong
             -Wl,-z,relro -Wl,-z,now -s
+            -fno-rtti
     )
     add_compile_options(${OPTIMIZERS})
     add_link_options(${OPTIMIZERS})

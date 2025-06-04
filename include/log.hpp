@@ -27,7 +27,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <iomanip>
-#ifdef DEBUG
+#if DEBUG
 #   include <vector>
 #   include <tuple>      // for std::tuple, std::make_tuple
 #   include <utility>    // for std::forward
@@ -251,7 +251,7 @@ namespace debug {
         (_log(args), ...);
     }
 
-#ifdef DEBUG
+#if DEBUG
     extern bool do_i_show_caller_next_time;
 
     template <typename... Args> void log(const char * caller, const Args &...args)
@@ -297,10 +297,20 @@ namespace debug {
     }
 }
 
-#if defined(DEBUG)
-#define debug_log(...) ::debug::log(__FUNCTION__, __VA_ARGS__)
+#if DEBUG
+#   include <source_location>
+    inline std::string strip_name(const std::string & name)
+    {
+        const std::regex pattern(R"([\w]+ (.*)\(.*\))");
+        if (std::smatch matches; std::regex_match(name, matches, pattern) && matches.size() > 1) {
+            return matches[1];
+        }
+
+        return name;
+    }
+#   define debug_log(...) ::debug::log(strip_name(std::source_location::current().function_name()).c_str(), __VA_ARGS__)
 #else
-#define debug_log(...) ::debug::log(__VA_ARGS__)
+#   define debug_log(...) ::debug::log(__VA_ARGS__)
 #endif
 
 #endif // LOG_HPP
