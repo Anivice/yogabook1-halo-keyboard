@@ -8,6 +8,7 @@ Type=simple
 ExecStartPre=/usr/bin/loadkeys /usr/local/etc/halo_keyboard/ctrlword.map
 ExecStart=/usr/local/bin/halo_kbd /usr/local/etc/halo_keyboard/yogabook1.map
 ExecStop=/bin/kill -s SIGINT -$MAINPID
+ExecStopPost=/usr/bin/rm -f /tmp/.HaloKeyboard.lock
 KillMode=process
 Restart=on-failure
 

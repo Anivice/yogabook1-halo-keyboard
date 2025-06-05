@@ -20,7 +20,6 @@
 #include <key_id.h>
 #include "execute_command.h"
 #include <filesystem>
-#include <system_error>
 
 constexpr unsigned int long_press_interval_ms = 80;
 volatile std::atomic_int ctrl_c = 0;
@@ -64,7 +63,8 @@ fn_key_invert_handler_map = {
 
 void sigint_handler(int)
 {
-    debug_log("Stopping...\n");
+    constexpr char output_message[] = { 'S', 't', 'o', 'p', 'p', 'i', 'n', 'g', '.', '.', '.', '\n' };
+    write(1, output_message, sizeof(output_message));
     ctrl_c = 1;
     if (halo_device_fd != -1) {
         close(halo_device_fd);
@@ -311,7 +311,7 @@ void emit_key_thread()
                 {
                     auto long_press_event_handler = [&](const std::atomic_bool * should_i_be_running)->void
                     {
-                        if (DEBUG) pthread_setname_np(pthread_self(), ("Long Press " + key_id_translate(key_id)).c_str());
+                        if constexpr (DEBUG) pthread_setname_np(pthread_self(), ("Long Press " + key_id_translate(key_id)).c_str());
                         else pthread_setname_np(pthread_self(), "Long Press");
                         while (*should_i_be_running)
                         {
