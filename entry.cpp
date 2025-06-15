@@ -15,11 +15,10 @@
 #include <iostream>
 #include <ranges>
 #include <functional>
-#include <linux/kd.h>
-#include <sys/ioctl.h>
 #include <key_id.h>
 #include "execute_command.h"
 #include <filesystem>
+#include "libmod.h"
 
 constexpr unsigned int long_press_interval_ms = 80;
 volatile std::atomic_int ctrl_c = 0;
@@ -32,7 +31,6 @@ struct key_state_t {
     std::chrono::time_point<std::chrono::high_resolution_clock> press_event_reg_time;
 };
 
-std::atomic_bool fnlock = true;
 std::mutex g_mutex;
 std::map < key_id_t, key_state_t > pressed_key;
 std::atomic_int vkbd_fd (-1);
@@ -40,11 +38,11 @@ std::atomic_bool fnlock_enabled = false;
 
 typedef void(*inverted_key_map_handler)(key_id_t);
 void fn_lock(key_id_t);
-void normal_key_emit(key_id_t);
+extern "C" void normal_key_emit(key_id_t);
 void settings(key_id_t);
 void airplane_mode(key_id_t);
 
-const std::map < key_id_t, std::pair <key_id_t, inverted_key_map_handler> >
+std::map < key_id_t, std::pair <key_id_t, inverted_key_map_handler> >
 fn_key_invert_handler_map = {
     { KEY_ID_ESC, {INVERTED_KEY_FNLOCK,         fn_lock} },
     { KEY_ID_F1,  {INVERTED_KEY_MUTE,           normal_key_emit} },
@@ -95,39 +93,13 @@ std::vector < std::string > key_id_translate(const Type & keys)
     return ret;
 }
 
-bool if_capslock_enabled()
-// NOTE: This programs works in system service and cannot query user-wise wayland compositor directly
-// wayland sessions are per-session per-user, cross user resource referencing is strictly prohibited in many, if not all, compositors
-// thus, the following query works only on active VT (Virtual Terminal, the actually text only environment), not with wayland enabled
-// With wayland session active, user does not own '/dev/console' any longer and CapsLock will always be reported as Not Locked
-{
-    const int fd = open("/dev/console", O_RDONLY);
-    if (fd < 0) {
-        perror("open");
-        return false;
-    }
-
-    int leds;
-    if (ioctl(fd, KDGETLED, &leds) == -1) {
-        perror("ioctl");
-        return false;
-    }
-
-    close(fd);
-
-    if (leds & LED_CAP) { /* LED_CAP == 0x04 */
-        return true;
-    }
-
-    return false;
-}
-
 void fn_lock(const key_id_t)
 {
     fnlock_enabled = !fnlock_enabled;
     if (DEBUG) debug_log("Fn ", fnlock_enabled ? "" : "Un", "locked\n");
 }
 
+extern "C"
 void normal_key_emit(const key_id_t key_id)
 {
     emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
@@ -188,6 +160,8 @@ void emit_key_thread()
             bool do_i_invert = fnlock_enabled;
             do_i_invert = std::ranges::find(combination_sp_keys, KEY_ID_FN) != combination_sp_keys.end()
                 ? !do_i_invert : do_i_invert;
+
+            if (DEBUG) debug_log("Invert = ", do_i_invert, "\n");
 
             if (do_i_invert) {
                 const auto [inverted_key_id, handler] = fn_key_invert_handler_map.at(pressed_key);
@@ -439,8 +413,51 @@ static const libinput_interface interface =
 int main(int argc, char** argv)
 {
     debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "]\n");
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <map_file>" << std::endl;
+    bool fn_press = false;
+
+    auto argv_3_parse = [&]()->void
+    {
+        if (const std::string key_press_init = argv[2]; key_press_init == "FN")
+        {
+            debug_log("FN registered as pressed\n");
+            fn_press = true;
+        }
+        else if (key_press_init == "-") {}
+        else
+        {
+            std::cout << "Cannot understand initialization verb \"" << key_press_init << "\"\n";
+            exit(EXIT_FAILURE);
+        }
+    };
+
+    std::unique_ptr <Module> fnmod;
+    auto remap_fn_keys = [&]()->void
+    {
+        std::string mod_path = argv[3];
+        fnmod = std::make_unique<Module>(mod_path);
+        debug_log("Loaded Fn Key handler ", mod_path, "\n");
+        for (auto & [key, handler] : fn_key_invert_handler_map | std::views::values)
+        {
+            if (key != INVERTED_KEY_FNLOCK)
+            {
+                handler = (inverted_key_map_handler)dlsym(fnmod->get_handler(), "fn_key_handler_vector");
+                assert_throw(handler != nullptr);
+            }
+        }
+    };
+
+    if (argc == 3)
+    {
+        argv_3_parse();
+    }
+    else if (argc == 4)
+    {
+        argv_3_parse();
+        remap_fn_keys();
+    }
+    else if (argc != 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <map_file> [CAPS[,FN]]" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -460,7 +477,6 @@ int main(int argc, char** argv)
         ofs.close();
         debug_log("done.\n");
     }
-
 
     std::signal(SIGINT, sigint_handler);
 
@@ -522,6 +538,16 @@ int main(int argc, char** argv)
     std::map < unsigned int /* slot */, key_id_t > slot_to_key_id_map;
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    /*
+     * init key press conditions
+     */
+
+    if (fn_press)
+    {
+        if (DEBUG) debug_log("Fn has initialization condition as pressed\n");
+        fn_lock(0);
+    }
 
     int next_id = 0;
     const auto touchpad_width = map.at(512).key_pixel_bottom_right_x - map.at(512).key_pixel_top_left_x;
