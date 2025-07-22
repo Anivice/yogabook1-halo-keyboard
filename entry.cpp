@@ -59,6 +59,22 @@ fn_key_invert_handler_map = {
     { KEY_ID_F12, {INVERTED_KEY_PRINT,          normal_key_emit} },
 };
 
+const std::map < int, key_id_t > offset_map = {
+    { 0, INVERTED_KEY_FNLOCK },
+    { 1, INVERTED_KEY_MUTE },
+    { 2, INVERTED_KEY_VOLUMEDOWN },
+    { 3, INVERTED_KEY_VOLUMEUP },
+    { 4, INVERTED_KEY_AIRPLANEMODE },
+    { 5, INVERTED_KEY_BRIGHTNESSDOWN },
+    { 6, INVERTED_KEY_BRIGHTNESSUP },
+    { 7, INVERTED_KEY_SEARCH },
+    { 8, INVERTED_KEY_SETTINGS },
+    { 9, INVERTED_KEY_PREVIOUSSONG },
+    { 0, INVERTED_KEY_PLAYPAUSE },
+    { 11, INVERTED_KEY_NEXTSONG },
+    { 12, INVERTED_KEY_PRINT },
+};
+
 void sigint_handler(int)
 {
     constexpr char output_message[] = { 'S', 't', 'o', 'p', 'p', 'i', 'n', 'g', '.', '.', '.', '\n' };
@@ -112,9 +128,11 @@ std::vector<std::thread> xdg_thread_pool;
 
 void settings(const key_id_t)
 {
+#ifdef __KDE__
     if (DEBUG) debug_log("Launch System Settings\n");
     auto xdg_launch_settings = []()->void
     {
+        pthread_setname_np(pthread_self(), "LaunchSettings");
         exec_command("/usr/bin/env", "", "bash", "-c",
             "/usr/bin/machinectl shell "
             "--uid=1000 --setenv=XDG_RUNTIME_DIR=/run/user/1000 "
@@ -126,6 +144,7 @@ void settings(const key_id_t)
     };
 
     xdg_thread_pool.emplace_back(xdg_launch_settings);
+#endif // __KDE__
 }
 
 void airplane_mode(const key_id_t)
@@ -410,288 +429,319 @@ static const libinput_interface interface =
     .close_restricted = close_restricted,
 };
 
+const fs::path LockFilePath = "/tmp/.HaloKeyboard.lock";
+
 int main(int argc, char** argv)
 {
-    debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "]\n");
-    bool fn_press = false;
-
-    auto argv_3_parse = [&]()->void
+    try
     {
-        if (const std::string key_press_init = argv[2]; key_press_init == "FN")
-        {
-            debug_log("FN registered as pressed\n");
-            fn_press = true;
-        }
-        else if (key_press_init == "-") {}
-        else
-        {
-            std::cout << "Cannot understand initialization verb \"" << key_press_init << "\"\n";
-            exit(EXIT_FAILURE);
-        }
-    };
+        debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "]\n");
+        bool fn_press = false;
 
-    std::unique_ptr <Module> fnmod;
-    auto remap_fn_keys = [&]()->void
-    {
-        std::string mod_path = argv[3];
-        fnmod = std::make_unique<Module>(mod_path);
-        debug_log("Loaded Fn Key handler ", mod_path, "\n");
-        for (auto & [key, handler] : fn_key_invert_handler_map | std::views::values)
+        auto argv_3_parse = [&]()->void
         {
-            if (key != INVERTED_KEY_FNLOCK)
+            if (const std::string key_press_init = argv[2]; key_press_init == "FN")
             {
-                handler = (inverted_key_map_handler)dlsym(fnmod->get_handler(), "fn_key_handler_vector");
-                assert_throw(handler != nullptr);
+                debug_log("FN registered as pressed\n");
+                fn_press = true;
             }
+            else if (key_press_init == "-") {}
+            else
+            {
+                std::cout << "Cannot understand initialization verb \"" << key_press_init << "\"\n";
+                exit(EXIT_FAILURE);
+            }
+        };
+
+        std::unique_ptr <Module> fnmod;
+        auto remap_fn_keys = [&]()->void
+        {
+            std::string mod_path = argv[3];
+            std::vector <bool> modMap;
+            fnmod = std::make_unique<Module>(mod_path, modMap);
+            debug_log("Loaded Fn Key handler ", mod_path, "\n");
+
+            auto redirect = [&](const key_id_t redirect_key)-> void
+            {
+                for (auto & [key, handler] : fn_key_invert_handler_map | std::views::values)
+                {
+                    if (key != INVERTED_KEY_FNLOCK && key == redirect_key) // cannot override internal fn_lock logic
+                    {
+                        handler = (inverted_key_map_handler)(dlsym(fnmod->get_handler(), "fn_key_handler_vector"));
+                        assert_throw(handler != nullptr);
+                    }
+                }
+            };
+
+            for (int i = 0; i < modMap.size(); i++)
+            {
+                if (modMap.at(i))
+                {
+                    const auto key = offset_map.at(i);
+                    debug_log("Redirect fn key ", key_id_translate(key), " towards external mod\n");
+                    redirect(key);
+                }
+            }
+
+        };
+
+        if (argc == 3)
+        {
+            argv_3_parse();
         }
-    };
-
-    if (argc == 3)
-    {
-        argv_3_parse();
-    }
-    else if (argc == 4)
-    {
-        argv_3_parse();
-        remap_fn_keys();
-    }
-    else if (argc != 2)
-    {
-        std::cerr << "Usage: " << argv[0] << " <map_file> [CAPS[,FN]]" << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    debug_log("Creating lock file...");
-    const fs::path LockFilePath = "/tmp/.HaloKeyboard.lock";
-    if (fs::exists(LockFilePath)) {
-        std::cerr << "\n[ERROR] Lock file exists. If you believe this is an error, remove the file /tmp/.HaloKeyboard.lock\n";
-        return EXIT_FAILURE;
-    }
-    else
-    {
-        std::ofstream ofs(LockFilePath);
-        if (!ofs) {
-            std::cerr << "Failed to create lock file\n";
+        else if (argc == 4)
+        {
+            argv_3_parse();
+            remap_fn_keys();
+        }
+        else if (argc != 2)
+        {
+            std::cerr << "Usage: " << argv[0] << " <map_file> [CAPS[,FN]] [FN MOD]" << std::endl;
             return EXIT_FAILURE;
         }
-        ofs.close();
-        debug_log("done.\n");
-    }
 
-    std::signal(SIGINT, sigint_handler);
-
-    debug_log("Loading keymap...", '\n');
-
-    // read key map
-    debug_log("Loading keymap...");
-    std::ifstream ifs(argv[1]);
-    if (!ifs.is_open()) {
-        std::cerr << "Unable to open file" << std::endl;
-        return EXIT_FAILURE;
-    }
-    const auto map = read_key_map(ifs);
-    debug_log("done.\n");
-
-    // init linux input
-    debug_log("Initializing Linux input interface for virtual keyboard...");
-    vkbd_fd = init_linux_input(map);
-    debug_log("done.\n");
-
-    debug_log("Initializing Linux input interface for virtual mouse...");
-    int mouse_fd = init_linux_mouse_input();
-    debug_log("done.\n");
-
-    // load keyboard touchpad
-    libinput *li = nullptr;
-    debug_log("Initializing Halo keyboard input interface...");
-
-    // 1. create libinput context
-    if (DEBUG) debug_log("\n    Creating udev and libinput context...\n");
-    udev *udev = udev_new();
-    li = libinput_udev_create_context(&interface, nullptr, udev);
-    if (!li) {
-        std::cerr << "Failed to create libinput context\n";
-        return EXIT_FAILURE;
-    }
-
-    // 2. assign seat
-    if (DEBUG) debug_log("    Assigning seat to seat0...\n");
-    assert_throw(libinput_udev_assign_seat(li, "seat0") == 0);
-    if (DEBUG) debug_log("    Export file descriptor...\n");
-    halo_device_fd = libinput_get_fd(li);
-    if (DEBUG) debug_log("    => File descriptor for device input is ", halo_device_fd, "\n");
-    debug_log("done.\n");
-
-    // start virtual keyboard handling thread
-    debug_log("Initializing virtual keyboard...");
-    std::thread virtual_kbd_worker(emit_key_thread);
-    debug_log("done.\n");
-
-    pollfd pfd = { halo_device_fd, POLLIN, 0 };
-
-    debug_log("Main loop started, end handler by sending SIGINT(2) to current process (pid=", getpid(), ").\n");
-
-    std::map < key_id_t /* key */,
-        std::chrono::time_point<std::chrono::high_resolution_clock>
-    > time_of_the_last_press_event;
-
-    std::map < unsigned int /* slot */, key_id_t > slot_to_key_id_map;
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    /*
-     * init key press conditions
-     */
-
-    if (fn_press)
-    {
-        if (DEBUG) debug_log("Fn has initialization condition as pressed\n");
-        fn_lock(0);
-    }
-
-    int next_id = 0;
-    const auto touchpad_width = map.at(512).key_pixel_bottom_right_x - map.at(512).key_pixel_top_left_x;
-    const auto touchpad_height = map.at(512).key_pixel_bottom_right_y - map.at(512).key_pixel_top_left_y;
-
-    while (!ctrl_c)
-    {
-        // wait until libinput_fd is ready
-        if (poll(&pfd, 1, -1) <= 0) {
-            continue;
+        debug_log("Creating lock file...");
+        if (fs::exists(LockFilePath)) {
+            std::cerr << "\n[ERROR] Lock file exists. If you believe this is an error, remove the file /tmp/.HaloKeyboard.lock\n";
+            return EXIT_FAILURE;
+        }
+        else
+        {
+            std::ofstream ofs(LockFilePath);
+            if (!ofs) {
+                std::cerr << "Failed to create lock file\n";
+                return EXIT_FAILURE;
+            }
+            ofs.close();
+            debug_log("done.\n");
         }
 
-        // tell libinput to process the pending data
-        assert_throw(libinput_dispatch(li) == 0);
+        std::signal(SIGINT, sigint_handler);
 
-        libinput_event *ev;
-        while ((ev = libinput_get_event(li)))
+        debug_log("Loading keymap...", '\n');
+
+        // read key map
+        debug_log("Loading keymap...");
+        std::ifstream ifs(argv[1]);
+        if (!ifs.is_open()) {
+            std::cerr << "Unable to open file" << std::endl;
+            return EXIT_FAILURE;
+        }
+        const auto map = read_key_map(ifs);
+        debug_log("done.\n");
+
+        // init linux input
+        debug_log("Initializing Linux input interface for virtual keyboard...");
+        vkbd_fd = init_linux_input(map);
+        debug_log("done.\n");
+
+        debug_log("Initializing Linux input interface for virtual mouse...");
+        int mouse_fd = init_linux_mouse_input();
+        debug_log("done.\n");
+
+        // load keyboard touchpad
+        libinput *li = nullptr;
+        debug_log("Initializing Halo keyboard input interface...");
+
+        // 1. create libinput context
+        if (DEBUG) debug_log("\n    Creating udev and libinput context...\n");
+        udev *udev = udev_new();
+        li = libinput_udev_create_context(&interface, nullptr, udev);
+        if (!li) {
+            std::cerr << "Failed to create libinput context\n";
+            return EXIT_FAILURE;
+        }
+
+        // 2. assign seat
+        if (DEBUG) debug_log("    Assigning seat to seat0...\n");
+        assert_throw(libinput_udev_assign_seat(li, "seat0") == 0);
+        if (DEBUG) debug_log("    Export file descriptor...\n");
+        halo_device_fd = libinput_get_fd(li);
+        if (DEBUG) debug_log("    => File descriptor for device input is ", halo_device_fd, "\n");
+        debug_log("done.\n");
+
+        // start virtual keyboard handling thread
+        debug_log("Initializing virtual keyboard...");
+        std::thread virtual_kbd_worker(emit_key_thread);
+        debug_log("done.\n");
+
+        pollfd pfd = { halo_device_fd, POLLIN, 0 };
+
+        debug_log("Main loop started, end handler by sending SIGINT(2) to current process (pid=", getpid(), ").\n");
+
+        std::map < key_id_t /* key */, std::chrono::time_point<std::chrono::high_resolution_clock> > time_of_the_last_press_event;
+        std::map < unsigned int /* slot */, key_id_t > slot_to_key_id_map;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        /*
+         * init key press conditions
+         */
+
+        if (fn_press)
         {
-            const auto type = libinput_event_get_type(ev);
-            if (type == LIBINPUT_EVENT_TOUCH_DOWN
-                || type == LIBINPUT_EVENT_TOUCH_UP
-                || type == LIBINPUT_EVENT_TOUCH_MOTION)
-            {
-                libinput_event_touch *tev =
-                    libinput_event_get_touch_event(ev);
+            if (DEBUG) debug_log("Fn has initialization condition as pressed\n");
+            fn_lock(0);
+        }
 
-                libinput_device *dev = libinput_event_get_device(ev);
-                unsigned vendor = libinput_device_get_id_vendor(dev);
-                unsigned product = libinput_device_get_id_product(dev);
-                const char *name = libinput_device_get_name(dev);
-                if (vendor != 1046 || product != 9110) {
-                    if (DEBUG) {
-                        debug_log("Device ", name, " (", vendor, ":", product, ") not recognized as Halo keyboard, ignored\n");
-                    }
-                    continue; // skipped the loop
-                }
+        int next_id = 0;
+        const auto touchpad_width = map.at(512).key_pixel_bottom_right_x - map.at(512).key_pixel_top_left_x;
+        const auto touchpad_height = map.at(512).key_pixel_bottom_right_y - map.at(512).key_pixel_top_left_y;
 
-                const int32_t slot = libinput_event_touch_get_seat_slot(tev);
-                double x = 0.00f, y = 0.00f;
-                if (type != LIBINPUT_EVENT_TOUCH_UP) {
-                    x = libinput_event_touch_get_x_transformed(tev, 1920);
-                    y = libinput_event_touch_get_y_transformed(tev, 2400);
-                }
-
-                long determined_key = -1;
-                // determine the key (fucking just iterate through)
-                for (const auto & [key, location] : map)
-                {
-                    if (is_this_within_key_location(x, y, location)) {
-                        determined_key = key;
-                        break;
-                    }
-                }
-
-                if (determined_key != -1 || type == LIBINPUT_EVENT_TOUCH_UP)
-                {
-                    // mouse event
-                    if ((determined_key == KEY_ID_MOUSELEFT
-                        || determined_key == KEY_ID_MOUSERIGHT
-                        || determined_key == KEY_ID_TOUCHPAD)
-                        || (type == LIBINPUT_EVENT_TOUCH_UP && slot_to_key_id_map.contains(slot)
-                            && (slot_to_key_id_map.at(slot) == KEY_ID_MOUSELEFT
-                                || slot_to_key_id_map.at(slot) == KEY_ID_MOUSERIGHT
-                                || slot_to_key_id_map.at(slot) == KEY_ID_TOUCHPAD)
-                        ))
-                    {
-                        if (type == LIBINPUT_EVENT_TOUCH_UP) {
-                            if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
-                        } else {
-                            slot_to_key_id_map.emplace(slot, determined_key);
-                        }
-                        touchpad_mouse_handler(map, x, y, determined_key, mouse_fd, type, slot, touchpad_width, touchpad_height, next_id);
-                    }
-                    // key release
-                    else if (type == LIBINPUT_EVENT_TOUCH_UP)
-                    {
-                        if (const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1; key_id != -1)
-                        {
-                            if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
-                            if (DEBUG) debug_log("Key ", key_id_translate(key_id), " (", key_id, ") release registered, slot=", slot, "\n");
-
-                            std::lock_guard<std::mutex> lock(g_mutex);
-                            if (const auto it = pressed_key.find(key_id);
-                                it != pressed_key.end())
-                            {
-                                it->second.normal_press_handled = false;
-                                it->second.press_down = false;
-                            }
-                        }
-                    }
-                    else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
-                    {
-                        // keyboard only cares about `LIBINPUT_EVENT_TOUCH_DOWN`
-                        if (time_of_the_last_press_event.contains(determined_key))
-                        {
-                            const auto now = std::chrono::high_resolution_clock::now();
-                            const auto interval_since_press_down =
-                                now - time_of_the_last_press_event.at(determined_key);
-                            if (interval_since_press_down <
-                                std::chrono::microseconds(50))
-                            {
-                                continue; // ignore consecutive key press
-                            }
-                        }
-
-                        std::lock_guard guard(g_mutex);
-                        // avoid conflicting keys
-                        if (!pressed_key.contains(determined_key))
-                        {
-                            if (DEBUG) {
-                                debug_log("Key ", key_id_translate(determined_key),
-                                    " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
-                            }
-                            time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
-                            pressed_key[determined_key].normal_press_handled = false;
-                            pressed_key[determined_key].press_down = true;
-                            pressed_key[determined_key].press_event_reg_time = time_of_the_last_press_event[determined_key];
-                            slot_to_key_id_map[slot] = determined_key;
-                        }
-                    }
-                }
-                else if (DEBUG) {
-                    debug_log("Key pressed but no key associated with this location in key map. "
-                        "axisCoordinates=(1920x2400, ", x, ", ", y, ")\n");
-                }
-                // Release is NOT processed. This is a typewriter and once key is pressed down, it is released automatically
+        while (!ctrl_c)
+        {
+            // wait until libinput_fd is ready
+            if (poll(&pfd, 1, -1) <= 0) {
+                continue;
             }
 
-            libinput_event_destroy(ev);
+            // tell libinput to process the pending data
+            assert_throw(libinput_dispatch(li) == 0);
+
+            libinput_event *ev;
+            while ((ev = libinput_get_event(li)))
+            {
+                const auto type = libinput_event_get_type(ev);
+                if (type == LIBINPUT_EVENT_TOUCH_DOWN
+                    || type == LIBINPUT_EVENT_TOUCH_UP
+                    || type == LIBINPUT_EVENT_TOUCH_MOTION)
+                {
+                    libinput_event_touch *tev =
+                        libinput_event_get_touch_event(ev);
+
+                    libinput_device *dev = libinput_event_get_device(ev);
+                    unsigned vendor = libinput_device_get_id_vendor(dev);
+                    unsigned product = libinput_device_get_id_product(dev);
+                    const char *name = libinput_device_get_name(dev);
+                    if (vendor != 1046 || product != 9110) {
+                        if (DEBUG) {
+                            debug_log("Device ", name, " (", vendor, ":", product, ") not recognized as Halo keyboard, ignored\n");
+                        }
+                        continue; // skipped the loop
+                    }
+
+                    const int32_t slot = libinput_event_touch_get_seat_slot(tev);
+                    double x = 0.00f, y = 0.00f;
+                    if (type != LIBINPUT_EVENT_TOUCH_UP) {
+                        x = libinput_event_touch_get_x_transformed(tev, 1920);
+                        y = libinput_event_touch_get_y_transformed(tev, 2400);
+                    }
+
+                    long determined_key = -1;
+                    // determine the key (fucking just iterate through)
+                    for (const auto & [key, location] : map)
+                    {
+                        if (is_this_within_key_location(x, y, location)) {
+                            determined_key = key;
+                            break;
+                        }
+                    }
+
+                    if (determined_key != -1 || type == LIBINPUT_EVENT_TOUCH_UP)
+                    {
+                        // mouse event
+                        if ((determined_key == KEY_ID_MOUSELEFT
+                            || determined_key == KEY_ID_MOUSERIGHT
+                            || determined_key == KEY_ID_TOUCHPAD)
+                            || (type == LIBINPUT_EVENT_TOUCH_UP && slot_to_key_id_map.contains(slot)
+                                && (slot_to_key_id_map.at(slot) == KEY_ID_MOUSELEFT
+                                    || slot_to_key_id_map.at(slot) == KEY_ID_MOUSERIGHT
+                                    || slot_to_key_id_map.at(slot) == KEY_ID_TOUCHPAD)
+                            ))
+                        {
+                            if (type == LIBINPUT_EVENT_TOUCH_UP) {
+                                if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
+                            } else {
+                                slot_to_key_id_map.emplace(slot, determined_key);
+                            }
+                            touchpad_mouse_handler(map, x, y, determined_key, mouse_fd, type, slot, touchpad_width, touchpad_height, next_id);
+                        }
+                        // key release
+                        else if (type == LIBINPUT_EVENT_TOUCH_UP)
+                        {
+                            if (const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1; key_id != -1)
+                            {
+                                if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
+                                if (DEBUG) debug_log("Key ", key_id_translate(key_id), " (", key_id, ") release registered, slot=", slot, "\n");
+
+                                std::lock_guard<std::mutex> lock(g_mutex);
+                                if (const auto it = pressed_key.find(key_id);
+                                    it != pressed_key.end())
+                                {
+                                    it->second.normal_press_handled = false;
+                                    it->second.press_down = false;
+                                }
+                            }
+                        }
+                        else if (type == LIBINPUT_EVENT_TOUCH_DOWN)
+                        {
+                            // keyboard only cares about `LIBINPUT_EVENT_TOUCH_DOWN`
+                            if (time_of_the_last_press_event.contains(determined_key))
+                            {
+                                const auto now = std::chrono::high_resolution_clock::now();
+                                const auto interval_since_press_down =
+                                    now - time_of_the_last_press_event.at(determined_key);
+                                if (interval_since_press_down <
+                                    std::chrono::microseconds(50))
+                                {
+                                    continue; // ignore consecutive key press
+                                }
+                            }
+
+                            std::lock_guard guard(g_mutex);
+                            // avoid conflicting keys
+                            if (!pressed_key.contains(determined_key))
+                            {
+                                if (DEBUG) {
+                                    debug_log("Key ", key_id_translate(determined_key),
+                                        " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
+                                }
+                                time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
+                                pressed_key[determined_key].normal_press_handled = false;
+                                pressed_key[determined_key].press_down = true;
+                                pressed_key[determined_key].press_event_reg_time = time_of_the_last_press_event[determined_key];
+                                slot_to_key_id_map[slot] = determined_key;
+                            }
+                        }
+                    }
+                    else if (DEBUG) {
+                        debug_log("Key pressed but no key associated with this location in key map. "
+                            "axisCoordinates=(1920x2400, ", x, ", ", y, ")\n");
+                    }
+                    // Release is NOT processed. This is a typewriter and once key is pressed down, it is released automatically
+                }
+
+                libinput_event_destroy(ev);
+            }
         }
-    }
 
-    // delete devices
-    libinput_unref(li);
-    udev_unref(udev);
+        // delete devices
+        libinput_unref(li);
+        udev_unref(udev);
 
-    if (virtual_kbd_worker.joinable()) {
-        virtual_kbd_worker.join();
-    }
+        if (virtual_kbd_worker.joinable()) {
+            virtual_kbd_worker.join();
+        }
 
-    debug_log("Removing lock file...");
-    if (!fs::remove(LockFilePath)) {
-        debug_log("\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
+        debug_log("Removing lock file...");
+        if (!fs::remove(LockFilePath)) {
+            debug_log("\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
+        }
+        debug_log("done.\n");
+        return EXIT_SUCCESS;
     }
-    debug_log("done.\n");
-    return EXIT_SUCCESS;
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+        if (!fs::remove(LockFilePath)) {
+            debug_log("\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
+        }
+        return EXIT_FAILURE;
+    }
+    catch (...)
+    {
+        if (!fs::remove(LockFilePath)) {
+            debug_log("\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
+        }
+        return EXIT_FAILURE;
+    }
 }

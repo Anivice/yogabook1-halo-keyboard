@@ -11,6 +11,8 @@ else ()
     add_compile_definitions(DEBUG=0)
     set(OPTIMIZERS
             -O3
+            -march=native
+            -mtune=native
             -flto -fomit-frame-pointer
             -ffast-math -fstrict-aliasing
             -fdata-sections -ffunction-sections
@@ -61,7 +63,4 @@ add_executable(halo_kbd
         libmod.cpp include/libmod.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
-
-add_library(fn_keymods SHARED
-        fn_keymods.c
-        include/ckeyid.h)
+add_library(fn_keymods SHARED fn_keymods.c include/ckeyid.h)

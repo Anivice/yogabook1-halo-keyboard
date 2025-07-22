@@ -1,6 +1,11 @@
 #ifndef KEY_ID_H_
 #define KEY_ID_H_
 
+#include <linux/input-event-codes.h>
+#include <map>
+#include <vector>
+#include <string>
+
 // group 1
 constexpr unsigned int KEY_ID_FN    = 464;
 constexpr unsigned int KEY_ID_LCTRL = 29;
@@ -143,8 +148,6 @@ const std::vector < unsigned int > keys_supporting_long_press = {
     KEY_ID_F1, KEY_ID_F2, KEY_ID_F3, KEY_ID_F4, KEY_ID_F5, KEY_ID_F6,
     KEY_ID_F7, KEY_ID_F8, KEY_ID_F9, KEY_ID_F10, KEY_ID_F11, KEY_ID_F12, KEY_ID_DELETE,
 };
-
-#include <map>
 
 const std::map < const unsigned int, const std::string > key_id_to_str_translation_table =
 {
