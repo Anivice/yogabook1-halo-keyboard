@@ -48,9 +48,20 @@ execute_process(
         OUTPUT_VARIABLE BUILD_TIME
 )
 
+execute_process(
+        COMMAND bash -c "echo $XDG_SESSION_DESKTOP"
+        OUTPUT_VARIABLE BUILD_DESKTOP
+)
+
+if ("X${BUILD_DESKTOP}" STREQUAL "X")
+    set(BUILD_DESKTOP "INVALID_DESKTOP")
+endif ()
+
 add_compile_definitions(
         BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
+        "__${BUILD_DESKTOP}__=1"
+        VERSION="0.1.0-Release"
 )
 
 include_directories(include)

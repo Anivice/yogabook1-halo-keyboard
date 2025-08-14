@@ -1,3 +1,6 @@
+// This file uses unnecessarily complicated methods for key emissions because my Yogabook is too old to be use "normal"
+// methods, and these are workarounds to bypass certain issues (like sticky keys, etc.)
+
 #include <algorithm>
 #include "log.hpp"
 #include "map_reader.h"
