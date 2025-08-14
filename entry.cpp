@@ -466,7 +466,7 @@ int main(int argc, char** argv)
 {
     try
     {
-        debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "]\n");
+        debug_log("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "] version " VERSION "\n");
         bool fn_press = false;
 
         auto argv_3_parse = [&]()->void
