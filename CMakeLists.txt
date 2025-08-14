@@ -49,7 +49,7 @@ execute_process(
 )
 
 execute_process(
-        COMMAND bash -c "echo $XDG_SESSION_DESKTOP"
+        COMMAND bash -c "echo -n $XDG_SESSION_DESKTOP"
         OUTPUT_VARIABLE BUILD_DESKTOP
 )
 
@@ -60,7 +60,7 @@ endif ()
 add_compile_definitions(
         BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
-        "__${BUILD_DESKTOP}__=1"
+        __${BUILD_DESKTOP}__="${BUILD_DESKTOP}"
         VERSION="0.1.0-Release"
 )
 
