@@ -294,7 +294,11 @@ void emit_key_thread()
                         }
 
                         if (key_id == KEY_ID_WIN && no_key_pressed_after_win) {
-                            press_keys_once(KEY_ID_WIN); // now we press win
+                            if constexpr (DEBUG) debug_log("Clear Win key press on release, executing it NOW\n");
+                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                             no_key_pressed_after_win = false;
                         }
 
