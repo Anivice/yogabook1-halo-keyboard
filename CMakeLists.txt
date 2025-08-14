@@ -25,7 +25,7 @@ else ()
 endif ()
 
 execute_process(
-        COMMAND bash -c "echo $(dd if=/dev/random bs=32 count=1 2>/dev/null | xxd | xz | sha512sum | head -c 8)"
+        COMMAND bash -c "echo -n $(dd if=/dev/random bs=32 count=1 2>/dev/null | xxd | xz | sha512sum | head -c 8)"
         OUTPUT_VARIABLE BUILD_ID_PREFIX
 )
 
@@ -34,17 +34,17 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif ()
 
 execute_process(
-        COMMAND bash -c "echo $(date '+%s'):$(date '+%Y%m%d%H%M%S')"
+        COMMAND bash -c "echo -n $(date '+%s'):$(date '+%Y%m%d%H%M%S')"
         OUTPUT_VARIABLE BUILD_ID_TIMESTAMP
 )
 
 execute_process(
-        COMMAND bash -c "echo $(git log | head -n 1 | awk '{print $2}' | head -c 12)"
+        COMMAND bash -c "echo -n $(git log | head -n 1 | awk '{print $2}' | head -c 12)"
         OUTPUT_VARIABLE BUILD_ID_GIT_HEAD
 )
 
 execute_process(
-        COMMAND bash -c "echo $(date '+%Y-%m-%d %H:%M:%S')"
+        COMMAND bash -c "echo -n $(date '+%Y-%m-%d %H:%M:%S')"
         OUTPUT_VARIABLE BUILD_TIME
 )
 
