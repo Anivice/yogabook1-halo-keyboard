@@ -112,7 +112,7 @@ std::vector < std::string > key_id_translate(const Type & keys)
 void fn_lock(const key_id_t)
 {
     fnlock_enabled = !fnlock_enabled;
-    if (DEBUG) debug_log("Fn ", fnlock_enabled ? "" : "Un", "locked\n");
+    if constexpr (DEBUG) debug_log("Fn ", fnlock_enabled ? "" : "Un", "locked\n");
 }
 
 extern "C"
@@ -129,7 +129,7 @@ std::vector<std::thread> xdg_thread_pool;
 void settings(const key_id_t)
 {
 #ifdef __KDE__
-    if (DEBUG) debug_log("Launch System Settings\n");
+    if constexpr (DEBUG) debug_log("Launch System Settings\n");
     auto xdg_launch_settings = []()->void
     {
         pthread_setname_np(pthread_self(), "LaunchSettings");
@@ -149,7 +149,7 @@ void settings(const key_id_t)
 
 void airplane_mode(const key_id_t)
 {
-    if (DEBUG) debug_log("XDG setting Airplane Mode\n");
+    if constexpr (DEBUG) debug_log("XDG setting Airplane Mode\n");
     debug_log("[WARNING] Toggling Airplane Mode not implemented and possibly never plan to. This key lacks practical purpose.\n");
 }
 
@@ -172,7 +172,7 @@ void emit_key_thread()
         std::lock_guard<std::mutex> lock(mutex_);
         if (fn_key_invert_handler_map.contains(pressed_key))
         {
-            if (DEBUG) debug_log("Fn governed key ", key_id_translate(pressed_key), " pressed, Fn is ",
+            if constexpr (DEBUG) debug_log("Fn governed key ", key_id_translate(pressed_key), " pressed, Fn is ",
                 (std::ranges::find(combination_sp_keys, KEY_ID_FN) != combination_sp_keys.end() ? "" : "NOT "),
                 "present within the key combination\n");
             // check if Fn Lock and Fn key presence within combinations
@@ -180,14 +180,14 @@ void emit_key_thread()
             do_i_invert = std::ranges::find(combination_sp_keys, KEY_ID_FN) != combination_sp_keys.end()
                 ? !do_i_invert : do_i_invert;
 
-            if (DEBUG) debug_log("Invert = ", do_i_invert, "\n");
+            if constexpr (DEBUG) debug_log("Invert = ", do_i_invert, "\n");
 
             if (do_i_invert) {
                 const auto [inverted_key_id, handler] = fn_key_invert_handler_map.at(pressed_key);
-                if (DEBUG) debug_log("Pressing down ", key_id_translate(inverted_key_id), "\n");
+                if constexpr (DEBUG) debug_log("Pressing down ", key_id_translate(inverted_key_id), "\n");
                 handler(inverted_key_id);
             } else { // just press the corresponding key
-                if (DEBUG) debug_log("Pressing down ", key_id_translate(pressed_key), "\n");
+                if constexpr (DEBUG) debug_log("Pressing down ", key_id_translate(pressed_key), "\n");
                 emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
                 emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                 emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
@@ -196,20 +196,20 @@ void emit_key_thread()
         }
         else
         {
-            if (DEBUG) {
+            if constexpr (DEBUG) {
                 debug_log("Executing key press cb:", key_id_translate(combination_sp_keys),
                     " & ch:", key_id_translate(pressed_key), ", fn:", fnlock_enabled, "\n");
             }
 
-            for (const auto key_id : combination_sp_keys) {
-                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-            }
+            // for (const auto key_id : combination_sp_keys) {
+                // emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+            // }
             emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
 
-            for (const auto key_id : combination_sp_keys) {
-                emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
-            }
+            // for (const auto key_id : combination_sp_keys) {
+                // emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+            // }
             emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
         }
@@ -237,7 +237,7 @@ void emit_key_thread()
                             emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
                             // emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                             state.normal_press_handled = true;
-                            if (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " registered\n");
+                            if constexpr (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " registered\n");
                         }
                     }
                     /////////////////
@@ -283,10 +283,16 @@ void emit_key_thread()
                         }
 
                         std::lock_guard<std::mutex> lock(mutex_);
+                        if (std::ranges::find(combination_sp_keys, key_id) != combination_sp_keys.end()) // if this is a functional key
+                        {
+                            if constexpr (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " released\n");
+                            emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                        }
                         std::erase(combination_sp_keys, key_id); // this will delete WIN as well
                         invalid_keys.push_back(key_id);
                         state.normal_press_handled = true;
-                        if (DEBUG) debug_log("Key ", key_id_translate(key_id), " released\n");
+                        if constexpr (DEBUG) debug_log("Key ", key_id_translate(key_id), " released\n");
                     }
                 }
 
@@ -323,7 +329,7 @@ void emit_key_thread()
                     // create thread:
                     long_pressed_keys.back().thread = std::thread(long_press_event_handler,
                         long_pressed_keys.back().running.get());
-                    if (DEBUG) debug_log("Created thread for long press key ", key_id_translate(key_id), "\n");
+                    if constexpr (DEBUG) debug_log("Created thread for long press key ", key_id_translate(key_id), "\n");
                 }
             }
 
@@ -372,7 +378,7 @@ void touchpad_mouse_handler(const kbd_map & map,
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
         emit(mouse_fd, EV_KEY, determined_key, 0);
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0); // sync
-        if (DEBUG) { debug_log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
+        if constexpr (DEBUG) { debug_log("TouchPad ", key_id_translate(determined_key), " key pressed\n"); }
     }
     else if (determined_key == 512 || type == LIBINPUT_EVENT_TOUCH_UP)
     {
@@ -412,7 +418,7 @@ void touchpad_mouse_handler(const kbd_map & map,
         /* 3. flush the packet */
         emit(mouse_fd, EV_SYN, SYN_REPORT, 0);
 
-        if (DEBUG) { debug_log("TouchPad movement (", x, ", ", y, ") "
+        if constexpr (DEBUG) { debug_log("TouchPad movement (", x, ", ", y, ") "
             "mapped to (", new_x, ", ", new_y, "), slot=", slot, "\n"); }
     }
 }
@@ -546,7 +552,7 @@ int main(int argc, char** argv)
         debug_log("Initializing Halo keyboard input interface...");
 
         // 1. create libinput context
-        if (DEBUG) debug_log("\n    Creating udev and libinput context...\n");
+        if constexpr (DEBUG) debug_log("\n    Creating udev and libinput context...\n");
         udev *udev = udev_new();
         li = libinput_udev_create_context(&interface, nullptr, udev);
         if (!li) {
@@ -555,11 +561,11 @@ int main(int argc, char** argv)
         }
 
         // 2. assign seat
-        if (DEBUG) debug_log("    Assigning seat to seat0...\n");
+        if constexpr (DEBUG) debug_log("    Assigning seat to seat0...\n");
         assert_throw(libinput_udev_assign_seat(li, "seat0") == 0);
-        if (DEBUG) debug_log("    Export file descriptor...\n");
+        if constexpr (DEBUG) debug_log("    Export file descriptor...\n");
         halo_device_fd = libinput_get_fd(li);
-        if (DEBUG) debug_log("    => File descriptor for device input is ", halo_device_fd, "\n");
+        if constexpr (DEBUG) debug_log("    => File descriptor for device input is ", halo_device_fd, "\n");
         debug_log("done.\n");
 
         // start virtual keyboard handling thread
@@ -581,7 +587,7 @@ int main(int argc, char** argv)
 
         if (fn_press)
         {
-            if (DEBUG) debug_log("Fn has initialization condition as pressed\n");
+            if constexpr (DEBUG) debug_log("Fn has initialization condition as pressed\n");
             fn_lock(0);
         }
 
@@ -615,7 +621,7 @@ int main(int argc, char** argv)
                     unsigned product = libinput_device_get_id_product(dev);
                     const char *name = libinput_device_get_name(dev);
                     if (vendor != 1046 || product != 9110) {
-                        if (DEBUG) {
+                        if constexpr (DEBUG) {
                             debug_log("Device ", name, " (", vendor, ":", product, ") not recognized as Halo keyboard, ignored\n");
                         }
                         continue; // skipped the loop
@@ -663,7 +669,7 @@ int main(int argc, char** argv)
                             if (const auto key_id = slot_to_key_id_map.contains(slot) ? slot_to_key_id_map.at(slot) : -1; key_id != -1)
                             {
                                 if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
-                                if (DEBUG) debug_log("Key ", key_id_translate(key_id), " (", key_id, ") release registered, slot=", slot, "\n");
+                                if constexpr (DEBUG) debug_log("Key ", key_id_translate(key_id), " (", key_id, ") release registered, slot=", slot, "\n");
 
                                 std::lock_guard<std::mutex> lock(g_mutex);
                                 if (const auto it = pressed_key.find(key_id);
@@ -693,7 +699,7 @@ int main(int argc, char** argv)
                             // avoid conflicting keys
                             if (!pressed_key.contains(determined_key))
                             {
-                                if (DEBUG) {
+                                if constexpr (DEBUG) {
                                     debug_log("Key ", key_id_translate(determined_key),
                                         " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
                                 }
@@ -705,7 +711,7 @@ int main(int argc, char** argv)
                             }
                         }
                     }
-                    else if (DEBUG) {
+                    else if constexpr (DEBUG) {
                         debug_log("Key pressed but no key associated with this location in key map. "
                             "axisCoordinates=(1920x2400, ", x, ", ", y, ")\n");
                     }
