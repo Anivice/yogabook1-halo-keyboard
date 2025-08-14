@@ -201,16 +201,30 @@ void emit_key_thread()
                     " & ch:", key_id_translate(pressed_key), ", fn:", fnlock_enabled, "\n");
             }
 
-            // for (const auto key_id : combination_sp_keys) {
-                // emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-            // }
+            // release all functional key
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+            }
+            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+
+            // press again
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+            }
             emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 1 /* press down */);
             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
 
-            // for (const auto key_id : combination_sp_keys) {
-                // emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
-            // }
+            // release again
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+            }
             emit(vkbd_fd, EV_KEY, pressed_key /* key code */, 0 /* release */);
+            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+
+            // press down again, until it's released by a "pressure gone" signal
+            for (const auto key_id : combination_sp_keys) {
+                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+            }
             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
         }
     };
@@ -235,7 +249,7 @@ void emit_key_thread()
                         {
                             combination_sp_keys.push_back(key_id);
                             emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                            // emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                             state.normal_press_handled = true;
                             if constexpr (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " registered\n");
                         }
