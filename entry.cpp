@@ -128,6 +128,7 @@ void normal_key_emit(const key_id_t key_id)
 }
 
 std::vector<std::thread> xdg_thread_pool;
+std::mutex xdg_thread_pool_mutex;
 
 void settings(const key_id_t)
 {
@@ -146,6 +147,7 @@ void settings(const key_id_t)
             "/usr/bin/systemsettings &");
     };
 
+    std::lock_guard<std::mutex> lock(xdg_thread_pool_mutex);
     xdg_thread_pool.emplace_back(xdg_launch_settings);
 #endif // __KDE__
 }
@@ -375,10 +377,13 @@ void emit_key_thread()
         }
     }
 
-    for (auto & thread : xdg_thread_pool)
     {
-        if (thread.joinable()) {
-            thread.join();
+        std::lock_guard<std::mutex> lock(xdg_thread_pool_mutex);
+        for (auto & thread : xdg_thread_pool)
+        {
+            if (thread.joinable()) {
+                thread.join();
+            }
         }
     }
 
