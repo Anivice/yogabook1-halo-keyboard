@@ -263,8 +263,10 @@ void emit_key_thread()
                             std::lock_guard local_guard(mutex_);
                             combination_sp_keys.push_back(KEY_ID_WIN);
                             no_key_pressed_after_win = true;
+                            if constexpr (DEBUG) debug_log("Clear Win key state registered\n");
                         } else {
                             if (no_key_pressed_after_win) {
+                                if constexpr (DEBUG) debug_log("Clear Win key state damaged\n");
                                 no_key_pressed_after_win = false;
                             }
                             press_keys_once(key_id);
