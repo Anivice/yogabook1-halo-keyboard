@@ -57,6 +57,7 @@ if ("X${BUILD_DESKTOP}" STREQUAL "X")
     set(BUILD_DESKTOP "INVALID_DESKTOP")
 endif ()
 
+message(STATUS "Build on ${BUILD_TIME}, of ID ${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}, active: __${BUILD_DESKTOP}__")
 add_compile_definitions(
         BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
