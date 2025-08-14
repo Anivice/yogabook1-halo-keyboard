@@ -16,7 +16,7 @@ else ()
             -flto -fomit-frame-pointer
             -ffast-math -fstrict-aliasing
             -fdata-sections -ffunction-sections
-            -D_FORTIFY_SOURCE=2 -fstack-protector-strong
+            -D_FORTIFY_SOURCE=2 -fno-stack-protector
             -Wl,-z,relro -Wl,-z,now -s
             -fno-rtti
     )

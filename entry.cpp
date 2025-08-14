@@ -235,7 +235,7 @@ void emit_key_thread()
                         {
                             combination_sp_keys.push_back(key_id);
                             emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
-                            emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                            // emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
                             state.normal_press_handled = true;
                             if (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " registered\n");
                         }
