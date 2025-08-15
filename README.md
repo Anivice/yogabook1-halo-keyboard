@@ -28,7 +28,7 @@ You need to install C/C++ compilers supporting C++23,
 If your compiler does not support any of the "optimization" flags,
 delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section):
 
-https://github.com/Anivice/yogabook1-halo-keyboard/tree/632a8bfa927b9df2ca5501b889afc29a3c457405/CMakeLists.txt#L18-L28
+https://github.com/Anivice/yogabook1-halo-keyboard/blob/632a8bfa927b9df2ca5501b889afc29a3c457405/CMakeLists.txt#L18-L28
 
 They don't matter at all.
 
