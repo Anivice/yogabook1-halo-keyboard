@@ -38,6 +38,7 @@ std::mutex g_mutex;
 std::map < key_id_t, key_state_t > pressed_key;
 std::atomic_int vkbd_fd (-1);
 std::atomic_bool fnlock_enabled = false;
+std::atomic_bool release_all_keys = false;
 
 typedef void(*inverted_key_map_handler)(key_id_t);
 void fn_lock(key_id_t);
@@ -170,11 +171,11 @@ void emit_key_thread()
     thread_local std::vector < long_press_struct > long_pressed_keys;
     std::atomic_bool no_key_pressed_after_win = false;
     std::vector < unsigned int > combination_sp_keys;
-    std::mutex mutex_;
+    std::mutex combination_sp_keys_mutex_;
 
     auto press_keys_once = [&](const key_id_t pressed_key)->void
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(combination_sp_keys_mutex_);
         if (fn_key_invert_handler_map.contains(pressed_key))
         {
             if constexpr (DEBUG) debug_log("Fn governed key ", key_id_translate(pressed_key), " pressed, Fn is ",
@@ -240,6 +241,35 @@ void emit_key_thread()
             std::vector<unsigned int> invalid_keys;
             std::lock_guard guard(g_mutex);
 
+            //////////////////////////////
+            /// FORCE RELEASE ALL KEYS ///
+            //////////////////////////////
+            if (release_all_keys)
+            {
+                if constexpr (DEBUG) debug_log("Force releasing all keys\n");
+                for (const auto& key_id : pressed_key | std::views::keys)
+                {
+                    emit(vkbd_fd, EV_KEY, key_id /* key code */, 0 /* release */);
+                    emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
+                }
+
+                invalid_keys.clear();
+                {
+                    std::lock_guard<std::mutex> lock(combination_sp_keys_mutex_);
+                    combination_sp_keys.clear();
+                }
+                no_key_pressed_after_win = false;
+                for (auto & thread : long_pressed_keys)
+                {
+                    thread.running->store(false);
+                    if (thread.thread.joinable()) {
+                        thread.thread.join();
+                    }
+                }
+                pressed_key.clear();
+                release_all_keys = false;
+            }
+
             for (auto & [key_id, state] : pressed_key)
             {
                 ///////////////////////////////////
@@ -265,7 +295,7 @@ void emit_key_thread()
                     else if (state.press_down)
                     {
                         if (key_id == KEY_ID_WIN) {
-                            std::lock_guard local_guard(mutex_);
+                            std::lock_guard local_guard(combination_sp_keys_mutex_);
                             combination_sp_keys.push_back(KEY_ID_WIN);
                             no_key_pressed_after_win = true;
                             if constexpr (DEBUG) debug_log("Clear Win key state registered\n");
@@ -307,7 +337,7 @@ void emit_key_thread()
                             no_key_pressed_after_win = false;
                         }
 
-                        std::lock_guard<std::mutex> lock(mutex_);
+                        std::lock_guard<std::mutex> lock(combination_sp_keys_mutex_);
                         if (std::ranges::find(combination_sp_keys, key_id) != combination_sp_keys.end()) // if this is a functional key
                         {
                             if constexpr (DEBUG) debug_log("Functional key ", key_id_translate(key_id), " released\n");
@@ -607,6 +637,63 @@ int main(int argc, char** argv)
 
         std::map < key_id_t /* key */, std::chrono::time_point<std::chrono::high_resolution_clock> > time_of_the_last_press_event;
         std::map < unsigned int /* slot */, key_id_t > slot_to_key_id_map;
+        int reset_key_counter = 0;
+        auto reset_counter = [&]()->void {
+            release_all_keys = false;
+            reset_key_counter = 0;
+        };
+
+        auto append_when_fit = [&](const key_id_t id)->void
+        {
+            bool fail = false;
+            switch (reset_key_counter)
+            {
+            case 0:
+                {
+                    if (id == KEY_ID_LCTRL) {
+                        reset_key_counter++;
+                    } else {
+                        fail = true;
+                    }
+                }
+                break;
+            case 1:
+                {
+                    if (id == KEY_ID_LALT) {
+                        reset_key_counter++;
+                    } else {
+                        fail = true;
+                    }
+                }
+                break;
+            case 2:
+                {
+                    if (id == KEY_ID_TAB) {
+                        reset_key_counter++;
+                    } else {
+                        fail = true;
+                    }
+                }
+                break;
+            default:
+                {
+                    fail = true;
+                }
+                break;
+            }
+
+            if (fail)
+            {
+                reset_counter();
+            }
+
+            if (reset_key_counter == 3)
+            {
+                if constexpr (DEBUG) debug_log("===> Key pressed for release ALL keys <===\n");
+                release_all_keys = true;
+            }
+        };
+
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         /*
@@ -703,6 +790,12 @@ int main(int argc, char** argv)
                                 if (const auto it = pressed_key.find(key_id);
                                     it != pressed_key.end())
                                 {
+                                    // reset "release all keys" counter
+                                    if (key_id == KEY_ID_LCTRL || key_id == KEY_ID_LALT || key_id == KEY_ID_TAB)
+                                    {
+                                        reset_counter();
+                                    }
+
                                     it->second.normal_press_handled = false;
                                     it->second.press_down = false;
                                 }
@@ -731,6 +824,7 @@ int main(int argc, char** argv)
                                     debug_log("Key ", key_id_translate(determined_key),
                                         " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
                                 }
+                                append_when_fit(determined_key);
                                 time_of_the_last_press_event[determined_key] = std::chrono::high_resolution_clock::now();
                                 pressed_key[determined_key].normal_press_handled = false;
                                 pressed_key[determined_key].press_down = true;

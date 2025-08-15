@@ -4,8 +4,14 @@ project(HaloKeyboard C CXX)
 set(CMAKE_CXX_STANDARD 23)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    add_compile_options(-fsanitize=thread -fsanitize=undefined -g3 -O0)
-    add_link_options(-lubsan -ltsan)
+    add_compile_options(
+            #-fsanitize=thread
+            -fsanitize=undefined -g3 -O0
+    )
+    add_link_options(
+            -lubsan
+            #-ltsan
+    )
     add_compile_definitions(DEBUG=1)
 else ()
     add_compile_definitions(DEBUG=0)
