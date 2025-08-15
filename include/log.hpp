@@ -287,9 +287,19 @@ namespace debug {
         auto ref_tuple = std::forward_as_tuple(args...);
         using LastType = std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>;
         const std::any last_arg = std::get<sizeof...(Args) - 1>(ref_tuple);
+        const std::string color_array[] = {
+            "\033[31;1m[", "\033[32;1m[", "\033[33;1m[", "\033[35;1m[", "\033[36;1m[",
+        };
 
         if (do_i_show_caller_next_time) {
-            _log("[", caller, "] ");
+            const auto caller_len = std::strlen(caller);
+            int index = 0;
+            for (int i = 0; i < caller_len; i++)
+            {
+                index += caller[i];
+            }
+            index %= 5;
+            _log(color_array[index], caller, "]\033[0m ");
         }
 
         if constexpr (!is_char_array<LastType>::value)
