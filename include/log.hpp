@@ -254,6 +254,32 @@ namespace debug {
 #if DEBUG
     extern bool do_i_show_caller_next_time;
 
+    template < typename StringType >
+        requires (std::is_same_v<StringType, std::string> || std::is_same_v<StringType, std::string_view>)
+        bool _do_i_show_caller_next_time_(const StringType & str)
+    {
+        return (!str.empty() && str.back() == '\n');
+    }
+
+    inline bool _do_i_show_caller_next_time_(const char * str)
+    {
+        return (strlen(str) > 0 && str[strlen(str) - 1] == '\n');
+    }
+
+    inline bool _do_i_show_caller_next_time_(const char c)
+    {
+        return (c == '\n');
+    }
+
+    template<typename T>
+    struct is_char_array : std::false_type {};
+
+    template<std::size_t N>
+    struct is_char_array<char[N]> : std::true_type {};
+
+    template<std::size_t N>
+    struct is_char_array<const char[N]> : std::true_type {};
+
     template <typename... Args> void log(const char * caller, const Args &...args)
     {
         std::lock_guard<std::mutex> lock(log_mutex);
@@ -266,28 +292,13 @@ namespace debug {
             _log("[", caller, "] ");
         }
 
-        // FIXME: this is an extremely ugly workaround. DON'T DO THIS
-        // only show called if last element is some form of string type and has '\n'
-        if (std::regex_match(typeid(LastType).name(), std::regex(R"(.*basic_string.*)")))
+        if constexpr (!is_char_array<LastType>::value)
         {
-            if (const auto str = std::any_cast<const std::string &>(last_arg); !str.empty()) {
-                do_i_show_caller_next_time = str[str.size() - 1] == '\n';
-            }
+            do_i_show_caller_next_time = _do_i_show_caller_next_time_(std::any_cast<LastType>(last_arg));
         }
-        else if (std::regex_match(typeid(LastType).name(), std::regex(R"(A[\d]+\_c)")))
+        else
         {
-            if (const auto str = std::any_cast<const char*>(last_arg); std::strlen(str) > 0) {
-                do_i_show_caller_next_time = str[std::strlen(str) - 1] == '\n';
-            }
-        }
-        else if (std::is_same_v<LastType, char>
-            || std::is_same_v<LastType, const char>
-            || std::is_same_v<LastType, const char&>)
-        {
-            const auto last_char = std::any_cast<char>(last_arg);
-            do_i_show_caller_next_time = last_char == '\n';
-        } else {
-            do_i_show_caller_next_time = false;
+            do_i_show_caller_next_time = _do_i_show_caller_next_time_(std::any_cast<const char*>(last_arg));
         }
 #else
     template <typename... Args> void log(const Args &...args)
