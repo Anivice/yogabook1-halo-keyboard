@@ -690,7 +690,7 @@ int main(int argc, char** argv)
             if (reset_key_counter == 3)
             {
                 if constexpr (DEBUG) debug_log("===> [LCtrl+LAlt+Tab]: Key pressed for release ALL keys <===\n");
-                else debug_log("===> Combination for immediate reset keyboard (LCtrl+LAlt+Tab) invoked <===\n", std::flush);
+                else debug_log("===> Combination for immediate reset keyboard (LCtrl+LAlt+Tab) invoked <===\n");
                 release_all_keys = true;
             }
         };
