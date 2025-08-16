@@ -26,7 +26,10 @@ The driver is in an "it works" state.
 You need to install C/C++ compilers supporting C++23,
 `libinput`, `libudev`, `make` or `ninja`, and `cmake` first.
 If your compiler does not support any of the "optimization" flags,
-delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section).
+delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section):
+
+https://github.com/Anivice/yogabook1-halo-keyboard/blob/632a8bfa927b9df2ca5501b889afc29a3c457405/CMakeLists.txt#L18-L28
+
 They don't matter at all.
 
 Build the driver with the following command:
