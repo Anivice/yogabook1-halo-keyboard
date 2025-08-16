@@ -68,7 +68,7 @@ add_compile_definitions(
         BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
         __${BUILD_DESKTOP}__="${BUILD_DESKTOP}"
-        VERSION="0.1.0-Release"
+        VERSION="0.9.1-Release"
 )
 
 include_directories(include)
