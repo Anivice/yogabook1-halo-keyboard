@@ -24,7 +24,7 @@
 #include <algorithm>
 
 std::mutex debug::log_mutex;
-std::atomic_uint debug::filter_level = 0;
+std::atomic_uint debug::filter_level = !!!DEBUG;
 unsigned int debug::log_level = 1;
 bool debug::endl_found_in_last_log = true;
 std::ostream * debug::output = nullptr;
@@ -47,7 +47,7 @@ public:
             try {
                 debug::filter_level = std::stoi(log_level_env, nullptr, 10);
             } catch (...) {
-                debug::filter_level = 0;
+                debug::filter_level = !!!DEBUG;
             }
 
             if (debug::filter_level > 3)
