@@ -509,8 +509,8 @@ int main(int argc, char** argv)
             else if (key_press_init == "-") {}
             else
             {
-                std::cout << "Cannot understand initialization verb \"" << key_press_init << "\"\n";
-                exit(EXIT_FAILURE);
+                print_log(ERROR_LOG, "Cannot understand initialization verb \"", key_press_init, "\"\n");
+                throw std::runtime_error("Cannot understand initialization verb");
             }
         };
 
@@ -563,15 +563,15 @@ int main(int argc, char** argv)
 
         print_log(INFO_LOG, "Creating lock file...");
         if (fs::exists(LockFilePath)) {
-            std::cerr << "\n[ERROR] Lock file exists. If you believe this is an error, remove the file /tmp/.HaloKeyboard.lock\n";
-            return EXIT_FAILURE;
+            print_log(ERROR_LOG, "\n[ERROR] Lock file exists. If you believe this is an error, remove the file /tmp/.HaloKeyboard.lock\n");
+            throw std::runtime_error("Lock file exists");
         }
         else
         {
             std::ofstream ofs(LockFilePath);
             if (!ofs) {
-                std::cerr << "Failed to create lock file\n";
-                return EXIT_FAILURE;
+                print_log(ERROR_LOG, "Failed to create lock file\n");
+                throw std::runtime_error("Lock file exists");
             }
             ofs.close();
             print_log(INFO_LOG, "done.\n");
@@ -585,8 +585,8 @@ int main(int argc, char** argv)
         print_log(INFO_LOG, "Loading keymap...");
         std::ifstream ifs(argv[1]);
         if (!ifs.is_open()) {
-            std::cerr << "Unable to open file" << std::endl;
-            return EXIT_FAILURE;
+            print_log(ERROR_LOG, "Unable to open file\n");
+            throw std::runtime_error("Unable to open file");
         }
         const auto map = read_key_map(ifs);
         print_log(INFO_LOG, "done.\n");
@@ -852,7 +852,7 @@ int main(int argc, char** argv)
     }
     catch (const std::exception &e)
     {
-        std::cerr << e.what() << '\n';
+        print_log(ERROR_LOG, e.what(), '\n');
         if (!fs::remove(LockFilePath)) {
             print_log(WARNING_LOG, "\n[WARNING] Lock file cannot be removed or doesn't exist, ignored\n");
         }
