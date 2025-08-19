@@ -17,8 +17,8 @@ else ()
     add_compile_definitions(DEBUG=0)
     set(OPTIMIZERS
             -O3
-            -march=native
-            -mtune=native
+#            -march=native
+#            -mtune=native
             -flto -fomit-frame-pointer
             -ffast-math -fstrict-aliasing
             -fdata-sections -ffunction-sections

@@ -227,7 +227,9 @@ void emit_key_thread()
 
             // press down again, until it's released by a "pressure gone" signal
             for (const auto key_id : combination_sp_keys) {
-                emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+                if (key_id != KEY_ID_WIN) { // ignore Win, it only serves as combination in my case
+                    emit(vkbd_fd, EV_KEY, key_id /* key code */, 1 /* press down */);
+                }
             }
             emit(vkbd_fd, EV_SYN, SYN_REPORT, 0); // sync
         }
