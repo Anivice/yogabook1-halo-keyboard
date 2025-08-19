@@ -157,6 +157,7 @@ namespace debug {
     extern unsigned int log_level;
     extern std::atomic_uint filter_level;
     extern bool endl_found_in_last_log;
+    extern std::ostream * output;
 
     template <typename ParamType>
     void _log(const ParamType& param);
@@ -222,29 +223,29 @@ namespace debug {
     {
         // NOLINTBEGIN(clang-diagnostic-repeated-branch-body)
         if constexpr (debug::is_string_v<ParamType>) { // if we don't do it here, it will be assumed as a container
-            std::cerr << param;
+            output << param;
         }
         else if constexpr (debug::is_container_v<ParamType>) {
             debug::print_container(param);
         }
         else if constexpr (debug::is_bool_v<ParamType>) {
-            std::cerr << (param ? "True" : "False");
+            output << (param ? "True" : "False");
         }
         else if constexpr (debug::is_pair_v<ParamType>) {
-            std::cerr << "<";
+            *output << "<";
             _log(param.first);
-            std::cerr << ": ";
+            *output << ": ";
             _log(param.second);
-            std::cerr << ">";
+            *output << ">";
         }
         else if constexpr (debug::is_move_front_t_v<ParamType>) {
-            std::cerr << "\033[F\033[K";
+            *output << "\033[F\033[K";
         }
         else if constexpr (debug::is_cursor_off_t_v<ParamType>) {
-            std::cerr << "\033[?25l";
+            *output << "\033[?25l";
         }
         else if constexpr (debug::is_cursor_on_t_v<ParamType>) {
-            std::cerr << "\033[?25h";
+            *output << "\033[?25h";
         }
         else if constexpr (debug::is_debug_log_t_v<ParamType>) {
             log_level = 0;
@@ -259,7 +260,7 @@ namespace debug {
             log_level = 3;
         }
         else {
-            std::cerr << param;
+            output << param;
         }
         // NOLINTEND(clang-diagnostic-repeated-branch-body)
     }

@@ -20,11 +20,14 @@
 
 #include "log.hpp"
 #include <regex>
+#include <ranges>
+#include <algorithm>
 
 std::mutex debug::log_mutex;
 std::atomic_uint debug::filter_level = 0;
 unsigned int debug::log_level = 1;
 bool debug::endl_found_in_last_log = true;
+std::ostream * debug::output = nullptr;
 std::string debug::strip_func_name(const std::string & name)
 {
     const std::regex pattern(R"([\w]+ (.*)\(.*\))");
@@ -34,10 +37,10 @@ std::string debug::strip_func_name(const std::string & name)
     return name;
 }
 
-class filter_level_init_instance_t
+class init_instance_t
 {
 public:
-    filter_level_init_instance_t()
+    init_instance_t()
     {
         if (const auto log_level_env = std::getenv("LOG_LEVEL"); log_level_env != nullptr)
         {
@@ -52,5 +55,20 @@ public:
                 debug::filter_level = 3;
             }
         }
+
+        debug::output = &std::cout;
+        if (const auto log_level_env = std::getenv("LOG_OUTPUT"); log_level_env != nullptr)
+        {
+            std::string log_output = log_level_env;
+            std::ranges::transform(log_output, log_output.begin(), ::tolower);
+            if (log_output == "stderr")
+            {
+                debug::output = &std::cerr;
+            }
+            else
+            {
+                debug::output = &std::cout;
+            }
+        }
     }
-} filter_level_init_instance;
+} log_init_instance;
