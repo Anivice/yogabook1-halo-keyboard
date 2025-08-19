@@ -223,13 +223,13 @@ namespace debug {
     {
         // NOLINTBEGIN(clang-diagnostic-repeated-branch-body)
         if constexpr (debug::is_string_v<ParamType>) { // if we don't do it here, it will be assumed as a container
-            output << param;
+            *output << param;
         }
         else if constexpr (debug::is_container_v<ParamType>) {
             debug::print_container(param);
         }
         else if constexpr (debug::is_bool_v<ParamType>) {
-            output << (param ? "True" : "False");
+            *output << (param ? "True" : "False");
         }
         else if constexpr (debug::is_pair_v<ParamType>) {
             *output << "<";
@@ -260,7 +260,7 @@ namespace debug {
             log_level = 3;
         }
         else {
-            output << param;
+            *output << param;
         }
         // NOLINTEND(clang-diagnostic-repeated-branch-body)
     }
