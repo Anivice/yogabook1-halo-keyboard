@@ -263,4 +263,6 @@ const std::map < const unsigned int, const std::string > key_id_to_str_translati
     { KEY_ID_TOUCHPAD, "TouchPad" },
 };
 
+typedef unsigned int key_id_t;
+
 #endif //KEY_ID_H_

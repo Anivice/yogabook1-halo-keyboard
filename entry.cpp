@@ -1,4 +1,4 @@
-// This file uses unnecessarily complicated methods for key emissions because my Yogabook is too old to be use "normal"
+// This file uses unnecessarily complicated methods for key emissions because my Yogabook is too old to use "normal"
 // methods, and these are workarounds to bypass certain issues (like sticky keys, etc.)
 
 #include <algorithm>
