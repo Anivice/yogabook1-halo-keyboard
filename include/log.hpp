@@ -27,14 +27,19 @@
 #include <unordered_map>
 #include <atomic>
 #include <iomanip>
-#if DEBUG
-#   include <vector>
-#   include <tuple>      // for std::tuple, std::make_tuple
-#   include <utility>    // for std::forward
-#   include <any>
-#   include <cstring>
-#   include <regex>
-#endif
+#include <ranges>
+#include <vector>
+#include <tuple>      // for std::tuple, std::make_tuple
+#include <utility>    // for std::forward
+#include <any>
+#include <cstring>
+#include <regex>
+#include <chrono>
+#include <functional>
+#include <cstddef>
+#include <type_traits>
+#include <source_location>
+#include "color.h"
 
 #define construct_simple_type_compare(type)                             \
     template <typename T>                                               \
@@ -95,7 +100,7 @@ namespace debug {
     };
 
     template <>
-    struct is_string<std::basic_string<char>> : std::true_type
+    struct is_string<std::string> : std::true_type
     {
     };
 
@@ -104,25 +109,36 @@ namespace debug {
     {
     };
 
+    template <>
+    struct is_string<std::string_view> : std::true_type
+    {
+    };
+
     template <typename T>
     constexpr bool is_string_v = is_string<T>::value;
 
     construct_simple_type_compare(bool);
 
-    inline class lower_case_bool_t {} lower_case_bool;
-    construct_simple_type_compare(lower_case_bool_t);
-
-    inline class upper_case_bool_t {} upper_case_bool;
-    construct_simple_type_compare(upper_case_bool_t);
-
-    inline class clear_line_t {} clear_line;
-    construct_simple_type_compare(clear_line_t);
+    inline class move_front_t {} move_front;
+    construct_simple_type_compare(move_front_t);
 
     inline class cursor_off_t {} cursor_off;
     construct_simple_type_compare(cursor_off_t);
 
     inline class cursor_on_t {} cursor_on;
     construct_simple_type_compare(cursor_on_t);
+
+    inline class debug_log_t {} debug_log;
+    construct_simple_type_compare(debug_log_t);
+
+    inline class info_log_t {} info_log;
+    construct_simple_type_compare(info_log_t);
+
+    inline class warning_log_t {} warning_log;
+    construct_simple_type_compare(warning_log_t);
+
+    inline class error_log_t {} error_log;
+    construct_simple_type_compare(error_log_t);
 
     template <typename T>
     struct is_pair : std::false_type
@@ -138,16 +154,16 @@ namespace debug {
     constexpr bool is_pair_v = is_pair<T>::value;
 
     extern std::mutex log_mutex;
+    extern unsigned int log_level;
+    extern std::atomic_uint filter_level;
+    extern bool endl_found_in_last_log;
+
     template <typename ParamType>
     void _log(const ParamType& param);
     template <typename ParamType, typename... Args>
     void _log(const ParamType& param, const Args&... args);
 
     /////////////////////////////////////////////////////////////////////////////////////////////
-    extern std::string str_true;
-    extern std::string str_false;
-    template <typename... Args> void log(const Args&... args);
-
     template <typename Container>
 	requires (debug::is_container_v<Container> &&
 		!debug::is_map_v<Container> &&
@@ -156,12 +172,12 @@ namespace debug {
     {
         constexpr uint64_t max_elements = 8;
         uint64_t num_elements = 0;
-        std::cerr << "[";
+        _log("[");
         for (auto it = std::begin(container); it != std::end(container); ++it)
         {
             if (num_elements == max_elements)
             {
-                std::cerr << "\n";
+                _log("\n");
                 _log("    ");
                 num_elements = 0;
             }
@@ -169,58 +185,50 @@ namespace debug {
             if (sizeof(*it) == 1 /* 8bit data width */)
             {
                 const auto & tmp = *it;
-                std::cerr << "0x" << std::hex << std::setw(2) << std::setfill('0')
-                        << static_cast<unsigned>((*(uint8_t *)(&tmp)) & 0xFF); // ugly workarounds
+                _log("0x", std::hex, std::setw(2), std::setfill('0'),
+                    static_cast<unsigned>((*(uint8_t *)(&tmp)) & 0xFF)); // ugly workarounds
             }
             else {
                 _log(*it);
             }
 
             if (std::next(it) != std::end(container)) {
-                std::cerr << ", ";
+                _log(", ");
             }
 
             num_elements++;
         }
-        std::cerr << "]";
+        _log("]");
     }
 
 	template <typename Map>
 	requires (debug::is_map_v<Map> || debug::is_unordered_map_v<Map>)
 	void print_container(const Map & map)
     {
-    	std::cerr << "{";
+    	_log("{");
     	for (auto it = std::begin(map); it != std::end(map); ++it)
     	{
     		_log(it->first);
-    		std::cerr << ": ";
+    		_log(": ");
     		_log(it->second);
     		if (std::next(it) != std::end(map)) {
-    			std::cerr << ", ";
+    			_log(", ");
     		}
     	}
-    	std::cerr << "}";
+    	_log("}");
     }
 
     template <typename ParamType> void _log(const ParamType& param)
     {
         // NOLINTBEGIN(clang-diagnostic-repeated-branch-body)
-        if constexpr (debug::is_string_v<ParamType>) {
+        if constexpr (debug::is_string_v<ParamType>) { // if we don't do it here, it will be assumed as a container
             std::cerr << param;
         }
         else if constexpr (debug::is_container_v<ParamType>) {
             debug::print_container(param);
         }
         else if constexpr (debug::is_bool_v<ParamType>) {
-            std::cerr << (param ? str_true : str_false);
-        }
-        else if constexpr (debug::is_lower_case_bool_t_v<ParamType>) {
-            str_true = "true";
-            str_false = "false";
-        }
-        else if constexpr (debug::is_upper_case_bool_t_v<ParamType>) {
-            str_true = "True";
-            str_false = "False";
+            std::cerr << (param ? "True" : "False");
         }
         else if constexpr (debug::is_pair_v<ParamType>) {
             std::cerr << "<";
@@ -229,7 +237,7 @@ namespace debug {
             _log(param.second);
             std::cerr << ">";
         }
-        else if constexpr (debug::is_clear_line_t_v<ParamType>) {
+        else if constexpr (debug::is_move_front_t_v<ParamType>) {
             std::cerr << "\033[F\033[K";
         }
         else if constexpr (debug::is_cursor_off_t_v<ParamType>) {
@@ -237,6 +245,18 @@ namespace debug {
         }
         else if constexpr (debug::is_cursor_on_t_v<ParamType>) {
             std::cerr << "\033[?25h";
+        }
+        else if constexpr (debug::is_debug_log_t_v<ParamType>) {
+            log_level = 0;
+        }
+        else if constexpr (debug::is_info_log_t_v<ParamType>) {
+            log_level = 1;
+        }
+        else if constexpr (debug::is_warning_log_t_v<ParamType>) {
+            log_level = 2;
+        }
+        else if constexpr (debug::is_error_log_t_v<ParamType>) {
+            log_level = 3;
         }
         else {
             std::cerr << param;
@@ -251,12 +271,9 @@ namespace debug {
         (_log(args), ...);
     }
 
-#if DEBUG
-    extern bool do_i_show_caller_next_time;
-
     template < typename StringType >
-        requires (std::is_same_v<StringType, std::string> || std::is_same_v<StringType, std::string_view>)
-        bool _do_i_show_caller_next_time_(const StringType & str)
+    requires (std::is_same_v<StringType, std::string> || std::is_same_v<StringType, std::string_view>)
+    bool _do_i_show_caller_next_time_(const StringType & str)
     {
         return (!str.empty() && str.back() == '\n');
     }
@@ -280,58 +297,142 @@ namespace debug {
     template<std::size_t N>
     struct is_char_array<const char[N]> : std::true_type {};
 
-    template <typename... Args> void log(const char * caller, const Args &...args)
+    template<std::size_t... Is, class Tuple>
+    constexpr auto tuple_drop_impl(Tuple&& t, std::index_sequence<Is...>) {
+        // shift indices by 1 to skip the head
+        return std::forward_as_tuple(std::get<Is + 1>(std::forward<Tuple>(t))...);
+    }
+
+    template<class Tuple>
+    constexpr auto tuple_drop1(Tuple&& t) {
+        constexpr std::size_t N = std::tuple_size_v<std::remove_reference_t<Tuple>>;
+        static_assert(N > 0, "cannot drop from empty tuple");
+        return tuple_drop_impl(std::forward<Tuple>(t), std::make_index_sequence<N - 1>{});
+    }
+
+    template <typename T, typename Tag>
+    struct strong_typedef
     {
-        std::lock_guard<std::mutex> lock(log_mutex);
+        T value;
+        strong_typedef() = default;
+        explicit strong_typedef(T v) : value(std::move(v)) {}
+        T& get() noexcept { return value; }
+        [[nodiscard]] const T& get() const noexcept { return value; }
+        explicit operator T&() noexcept { return value; }
+        explicit operator const T&() const noexcept { return value; }
+    };
+    template <typename T, typename Tag> void _log(const strong_typedef<T, Tag>&) { }
+
+    struct prefix_string_tag {};
+    using prefix_string_t = strong_typedef<std::string, prefix_string_tag>;
+
+    template <typename... Args> void log(const Args &...args)
+    {
+        std::lock_guard lock(log_mutex);
         static_assert(sizeof...(Args) > 0, "log(...) requires at least one argument");
         auto ref_tuple = std::forward_as_tuple(args...);
         using LastType = std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>;
+        using FirstType = std::tuple_element_t<0, std::tuple<Args...>>;
         const std::any last_arg = std::get<sizeof...(Args) - 1>(ref_tuple);
-        const std::string color_array[] = {
-            "\033[31;1m[", "\033[32;1m[", "\033[33;1m[", "\033[35;1m[", "\033[36;1m[",
+        std::string user_prefix_addon;
+
+        auto call_log = []<class... Ts>(Ts&&... xs) -> decltype(auto) {
+            return _log(std::forward<Ts>(xs)...);
         };
 
-        if (do_i_show_caller_next_time) {
-            const auto caller_len = std::strlen(caller);
-            int index = 0;
-            for (int i = 0; i < caller_len; i++)
+        if constexpr (std::is_same_v<FirstType, prefix_string_t>) // [PREFIX] [...]
+        {
+            const std::any first_arg = std::get<0>(ref_tuple);
+            user_prefix_addon = std::any_cast<prefix_string_t>(first_arg).value;
+        }
+
+        if (endl_found_in_last_log)
+        {
+            if (!user_prefix_addon.empty()) // Addon and second elements are all present
             {
-                index += caller[i];
+                if constexpr (sizeof...(Args) >= 2)
+                {
+                    using SecondType = std::tuple_element_t<1, std::tuple<Args...>>;
+                    // instead of checking the first, we check the second
+                    if constexpr (debug::is_debug_log_t_v<SecondType>) {
+                        log_level = 0;
+                    }
+                    else if constexpr (debug::is_info_log_t_v<SecondType>) {
+                        log_level = 1;
+                    }
+                    else if constexpr (debug::is_warning_log_t_v<SecondType>) {
+                        log_level = 2;
+                    }
+                    else if constexpr (debug::is_error_log_t_v<SecondType>) {
+                        log_level = 3;
+                    }
+                }
             }
-            index %= 5;
-            _log(color_array[index], caller, "]\033[0m ");
+            else // else, we check the first for the presence of log level
+            {
+                if constexpr (debug::is_debug_log_t_v<FirstType>) {
+                    log_level = 0;
+                }
+                else if constexpr (debug::is_info_log_t_v<FirstType>) {
+                    log_level = 1;
+                }
+                else if constexpr (debug::is_warning_log_t_v<FirstType>) {
+                    log_level = 2;
+                }
+                else if constexpr (debug::is_error_log_t_v<FirstType>) {
+                    log_level = 3;
+                }
+            }
+
+            const auto now = std::chrono::system_clock::now();
+            std::string prefix;
+            switch (log_level)
+            {
+                case 0: prefix =  color::color(1,1,1) + "[DEBUG]"; break;
+                case 1: prefix =  color::color(5,5,5) + "[INFO]"; break;
+                case 2: prefix =  color::color(0,5,5) + "[WARNING]"; break;
+                case 3: prefix =  color::color(5,0,0) + "[ERROR]"; break;
+                default: prefix = color::color(5,5,5) + "[INFO]"; break;
+            }
+
+            // now, check if the log level is printable or masked
+            if (log_level < filter_level)
+            {
+                return;
+            }
+
+            _log(color::color(0, 2, 2), std::format("{:%d-%m-%Y %H:%M:%S}", now), " ",
+                user_prefix_addon,
+                prefix, ": ", color::no_color());
         }
 
         if constexpr (!is_char_array<LastType>::value)
         {
-            do_i_show_caller_next_time = _do_i_show_caller_next_time_(std::any_cast<LastType>(last_arg));
+            endl_found_in_last_log = _do_i_show_caller_next_time_(std::any_cast<LastType>(last_arg));
         }
         else
         {
-            do_i_show_caller_next_time = _do_i_show_caller_next_time_(std::any_cast<const char*>(last_arg));
+            endl_found_in_last_log = _do_i_show_caller_next_time_(std::any_cast<const char*>(last_arg));
         }
-#else
-    template <typename... Args> void log(const Args &...args)
-    {
-#endif
-        _log(args...);
+
+        if (user_prefix_addon.empty())
+        {
+            _log(args...);
+        }
+        else if constexpr (sizeof...(Args) >= 2)
+        {
+            std::apply(call_log, tuple_drop1(ref_tuple));
+        }
     }
+
+    std::string strip_func_name(const std::string &);
+
 }
 
-#if DEBUG
-#   include <source_location>
-    inline std::string strip_name(const std::string & name)
-    {
-        const std::regex pattern(R"([\w]+ (.*)\(.*\))");
-        if (std::smatch matches; std::regex_match(name, matches, pattern) && matches.size() > 1) {
-            return matches[1];
-        }
-
-        return name;
-    }
-#   define debug_log(...) ::debug::log(strip_name(std::source_location::current().function_name()).c_str(), __VA_ARGS__)
-#else
-#   define debug_log(...) ::debug::log(__VA_ARGS__)
-#endif
+#define print_log(...)  (void)::debug::log(debug::prefix_string_t(color::color(2,3,4) + "(" + debug::strip_func_name(std::source_location::current().function_name()) + ") "), __VA_ARGS__)
+#define DEBUG_LOG       (debug::debug_log)
+#define INFO_LOG        (debug::info_log)
+#define WARNING_LOG     (debug::warning_log)
+#define ERROR_LOG       (debug::error_log)
 
 #endif // LOG_HPP

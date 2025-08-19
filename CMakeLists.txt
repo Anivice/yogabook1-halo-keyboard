@@ -73,12 +73,13 @@ add_compile_definitions(
 
 include_directories(include)
 add_executable(halo_kbd
-        emit_keys.cpp include/emit_keys.h
-        map_reader.cpp include/map_reader.h
-        entry.cpp include/key_id.h
-        include/log.hpp log.cpp
+        emit_keys.cpp       include/emit_keys.h
+        map_reader.cpp      include/map_reader.h
+        entry.cpp           include/key_id.h
+        log.cpp             include/log.hpp
         execute_command.cpp include/execute_command.h
-        libmod.cpp include/libmod.h
+        libmod.cpp          include/libmod.h
+        color.cpp           include/color.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
 add_library(fn_keymods SHARED fn_keymods.c include/ckeyid.h)
