@@ -74,6 +74,11 @@ with touchpad gestures working properly.
 Settings key is supported only on KDE when it's building under KDE Plasma.
 AirPlane key is not supported and deemed useless anyway.
 
+## Reset Keyboard
+
+You can immediately release all keys and reset the keyboard without restarting systemd service
+by pressing the combination `Left Ctrl + Left Alt + Tab`, in order.
+
 ## Heads-ups
 
 Unimplemented features are mostly related to Airplane key and Settings key.
