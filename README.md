@@ -95,6 +95,10 @@ as the driver depends on libinput's signals to detect key presses.
 
 ## Is it suitable for daily use?
 
+This keyboard driver is what you would expect from Lenovo, but without any vibration support.
+It gets the job done, and should impose no substantial issues.
+Not battle tested, but seems stable enough for daily use, if you ever plan to use YB1 X91F for anything, that is.
+
 To use foul language, I started this project as a "fuck around" with ArchLinux.
 I have BtrFS RAID0 setup on my Yogabook 1 to expand its storage space to 1TB.
 Still, its performance is not good enough for daily use due to
