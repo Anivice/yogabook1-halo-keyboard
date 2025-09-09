@@ -41,8 +41,14 @@ Build the driver with the following command:
 
 Copy the systemd service file to `/etc/systemd/system/halo_vkbd.service`,
 executable file `halo_kbd` to `/usr/local/bin/halo_kbd`,
+(optional) `ctrlword.map` to `/usr/local/etc/halo_keyboard/ctrlword.map`,
 and keymap file `yogabook1.map` to `/usr/local/etc/halo_keyboard/yogabook1.map`.
 Then, Start the service with `systemctl enable --now halo_vkbd.service`.
+
+> NOTE: `ctrlword.map` allows you to use Left Contrl with Left Arrow/Right Arrow
+> to skip words instead of individual characters in pure Linux console without any GUI setups.
+> Useful but entirely optional.
+> You can comment the `ExecStartPre=...loadkey...` line in systemd service file to remove the preloading of `ctrlword.map`.
 
 ## Currently Supported Features
 
