@@ -23,9 +23,9 @@ The driver is in an "it works" state.
 
 ## How To Use
 
-**To obtain executable file, you can either**
+**To obtain the executable file, you can either**
 
-### Build from source
+### Build it from source
 
 You need to install C/C++ compilers supporting C++23,
 `libinput`, `libudev`, `make` or `ninja`, and `cmake` first.
