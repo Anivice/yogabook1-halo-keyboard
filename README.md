@@ -23,6 +23,10 @@ The driver is in an "it works" state.
 
 ## How To Use
 
+**To obtain executable file, you can either**
+
+### Build from source
+
 You need to install C/C++ compilers supporting C++23,
 `libinput`, `libudev`, `make` or `ninja`, and `cmake` first.
 If your compiler does not support any of the "optimization" flags,
@@ -38,6 +42,16 @@ Build the driver with the following command:
       && cd yogabook1-halo-keyboard && mkdir build && cd build \
       && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel $(nproc)
 ```
+
+**Or**
+
+### Download it from the release page
+
+Release page has provided an executable file for `halo_kbd` with no support for both Airplane Key and Settings Key.
+It has no runtime library dependencies, but you need `libinput` (from distro)
+and corresponding drivers (should already be built-in in generic Linux) to listen to touchpad events.
+
+**Then**
 
 Copy the systemd service file to `/etc/systemd/system/halo_vkbd.service`,
 executable file `halo_kbd` to `/usr/local/bin/halo_kbd`,
