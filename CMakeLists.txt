@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.30)
 
 project(HaloKeyboard C CXX)
-set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD 20)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options(
@@ -54,7 +54,7 @@ add_executable(halo_kbd
         src/HaloKeyboard.cpp    include/HaloKeyboard.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
-target_compile_options(halo_kbd PRIVATE -std=gnu++26 -freflection)
+target_compile_options(halo_kbd PRIVATE -std=gnu++20)
 
 find_program(PATCHELF_EXEC NAMES patchelf REQUIRED)
 add_custom_target(AppImage_Stage1 ALL
