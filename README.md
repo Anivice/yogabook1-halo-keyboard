@@ -1,4 +1,5 @@
 # Yogabook1 Halo Keyboard
+
 Keyboard userspace driver for Yoga book YB1 X91F for Linux
 
 ## Introduction
@@ -72,14 +73,6 @@ Currently, the driver behaves like what it intended to do,
 as in both keyboard emulation and touchpad emulation.
 Tested on KDE and KDE recognizes both keyboard and touchpad
 with touchpad gestures working properly.
-
-Settings key is supported only on KDE when it's building under KDE Plasma.
-AirPlane key is not supported and deemed useless anyway.
-
-## Reset Keyboard
-
-You can immediately release all keys and reset the keyboard without restarting systemd service
-by pressing the combination `Left Ctrl + Left Alt + Tab`, in order.
 
 ## Heads-ups
 
