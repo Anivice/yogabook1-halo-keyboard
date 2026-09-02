@@ -150,7 +150,7 @@ namespace
     void sigint_handler(int)
     {
         constexpr char output_message[] = { 'S', 't', 'o', 'p', 'p', 'i', 'n', 'g', '.', '.', '.', '\n' };
-        write(1, output_message, sizeof(output_message));
+        (void)write(1, output_message, sizeof(output_message));
         ctrl_c.store(1, std::memory_order_relaxed);
     }
 
@@ -531,7 +531,7 @@ namespace
                                 {
                                     if (slot_to_key_id_map.contains(slot)) slot_to_key_id_map.erase(slot);
                                     print("Key ", key_id_translate(static_cast<key_id_t>(key_id)), " (", key_id, ") release registered, slot=", slot, "\n");
-                                    emit_keys_->pop_notifier_.push(key_id);
+                                    if (key_id) emit_keys_->pop_notifier_.push(key_id);
                                 }
                             }
                             // key press
@@ -540,7 +540,7 @@ namespace
                                 slot_to_key_id_map[slot] = determined_key;
                                 print("Key ", key_id_translate(determined_key),
                                     " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
-                                emit_keys_->push_notifier_.push(determined_key);
+                                if (determined_key) emit_keys_->push_notifier_.push(determined_key);
                             }
                         }
                         else {
