@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           mkdir build;
           cd build
-          { cmake .. && ninja -j $(nproc); } | tee /tmp/log.txt
+          { cmake ..  -G Ninja && ninja -j $(nproc); } | tee /tmp/log.txt
       - name: Upload log artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v6
