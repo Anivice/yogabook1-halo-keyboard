@@ -23,25 +23,11 @@ else ()
             -fdata-sections -ffunction-sections
             -D_FORTIFY_SOURCE=2 -fno-stack-protector
             -Wl,-z,relro -Wl,-z,now -s
-            -fno-rtti -fno-exceptions
+            -fno-rtti -fno-exceptions -fwhole-program -fuse-linker-plugin -fdevirtualize-at-ltrans
     )
     add_compile_options(${OPTIMIZERS})
     add_link_options(${OPTIMIZERS})
 endif ()
-
-execute_process(
-        COMMAND bash -c "echo -n $(dd if=/dev/random bs=32 count=1 2>/dev/null | xxd | xz | sha512sum | head -c 8)"
-        OUTPUT_VARIABLE BUILD_ID_PREFIX
-)
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    set(BUILD_ID_PREFIX "__${BUILD_ID_PREFIX}DEBUG")
-endif ()
-
-execute_process(
-        COMMAND bash -c "echo -n $(date '+%s'):$(date '+%Y%m%d%H%M%S')"
-        OUTPUT_VARIABLE BUILD_ID_TIMESTAMP
-)
 
 execute_process(
         COMMAND bash -c "echo -n $(git log | head -n 1 | awk '{print $2}' | head -c 12)"
@@ -53,29 +39,53 @@ execute_process(
         OUTPUT_VARIABLE BUILD_TIME
 )
 
-execute_process(
-        COMMAND bash -c "echo -n $XDG_SESSION_DESKTOP"
-        OUTPUT_VARIABLE BUILD_DESKTOP
-)
-
-if ("X${BUILD_DESKTOP}" STREQUAL "X")
-    set(BUILD_DESKTOP "INVALID_DESKTOP")
-endif ()
-
-message(STATUS "Build on ${BUILD_TIME}, of ID ${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}, active: __${BUILD_DESKTOP}__")
 add_compile_definitions(
-        BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
+        BUILD_ID="${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
-        __${BUILD_DESKTOP}__="${BUILD_DESKTOP}"
         VERSION="1.0.1-Release"
 )
 
 include_directories(include)
 add_executable(halo_kbd
-        map_reader.cpp      include/map_reader.h
-        entry.cpp           include/key_id.h
-        EmitKeys.cpp        include/EmitKeys.h
-        HaloKeyboard.cpp    include/HaloKeyboard.h
+        src/map_reader.cpp      include/map_reader.h
+        src/entry.cpp
+                                include/key_id.h
+        src/EmitKeys.cpp        include/EmitKeys.h
+        src/HaloKeyboard.cpp    include/HaloKeyboard.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
 target_compile_options(halo_kbd PRIVATE -std=gnu++26 -freflection)
+
+find_program(PATCHELF_EXEC NAMES patchelf REQUIRED)
+add_custom_target(AppImage_Stage1 ALL
+        COMMAND ${PATCHELF_EXEC} --set-rpath $ORIGIN halo_kbd
+        COMMAND ${PATCHELF_EXEC} --add-rpath $ORIGIN/libs halo_kbd
+        COMMAND ${PATCHELF_EXEC} --add-rpath /usr/lib halo_kbd
+        COMMAND ${PATCHELF_EXEC} --add-rpath /lib halo_kbd
+        COMMAND /bin/sh -c "file halo_kbd | sed -E 's/.*interpreter[[:space:]]([^,]+),.*/\\1/g' > interpreter.txt"
+        COMMAND /bin/sh -c "cp $(cat interpreter.txt) ${CMAKE_BINARY_DIR}/"
+        COMMAND /bin/sh -c "strip -g -S -d --strip-debug --strip-unneeded ${CMAKE_BINARY_DIR}/$(basename $(cat interpreter.txt))"
+        COMMAND /bin/sh -c "ldd halo_kbd | grep -v 'linux-vdso.so' | grep '=>' | sed -E \"$(cat ${CMAKE_SOURCE_DIR}/rule.txt)\" > libs.txt"
+        COMMAND /bin/sh -c "rm -rf libs && mkdir -p libs && for file in $(cat libs.txt); do cp $file libs/; done"
+        DEPENDS halo_kbd
+        BYPRODUCTS interpreter.txt libs.txt
+        VERBATIM
+)
+
+set(APPIMAGE_WORK_DIR "${CMAKE_BINARY_DIR}/halo_kbd.AppDir/")
+
+add_custom_target(AppImage_Stage2 ALL
+        COMMAND rm -rf ${APPIMAGE_WORK_DIR}
+        COMMAND /bin/sh -c "if ! [ -e appimagetool.finish ]; then curl -L https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool && chmod +x appimagetool && touch appimagetool.finish; fi"
+        COMMAND mkdir -p ${APPIMAGE_WORK_DIR}
+        COMMAND cp ${CMAKE_SOURCE_DIR}/resources/halo_kbd.desktop ${APPIMAGE_WORK_DIR}
+        COMMAND cp ${CMAKE_SOURCE_DIR}/resources/halo_kbd.svg     ${APPIMAGE_WORK_DIR}
+        COMMAND mv libs ${APPIMAGE_WORK_DIR}
+        COMMAND cp halo_kbd ${APPIMAGE_WORK_DIR}
+        COMMAND /bin/sh -c "cp $(basename $(cat interpreter.txt)) ${APPIMAGE_WORK_DIR}"
+        COMMAND /bin/sh -c "cat ${CMAKE_SOURCE_DIR}/resources/AppRun | sed s/INTERPRETER/$(basename $(cat interpreter.txt))/g > ${APPIMAGE_WORK_DIR}/AppRun"
+        COMMAND chmod +x ${APPIMAGE_WORK_DIR}/AppRun
+        COMMAND ./appimagetool ${APPIMAGE_WORK_DIR}
+        DEPENDS AppImage_Stage1
+        VERBATIM
+)

@@ -1,8 +1,6 @@
 #include "map_reader.h"
-#include <stdexcept>
-#include <sstream>
-
 #include "assert_throw.h"
+#include <sstream>
 
 bool is_this_within_key_location(const double x, const double y, const key_location_t &key)
 {

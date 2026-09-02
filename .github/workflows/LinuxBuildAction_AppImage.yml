@@ -1,0 +1,103 @@
+name: Linux Automatic Nightly AppImage Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            software-properties-common \
+            apt-transport-https \
+            cmake make git patchelf libtool ninja-build libinput-dev libudev-dev
+
+      - name: Configure and Build
+        run: |
+          set -euo pipefail
+          mkdir build;
+          cd build
+          { cmake .. && ninja -j $(nproc); } | tee /tmp/log.txt
+      - name: Upload log artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-log
+          path: /tmp/log.txt
+
+      - name: Open an Issue on Test Failure
+        if: ${{ always() && failure() && github.event_name != 'pull_request' }}
+        run: |
+          gh issue create \
+            --title "Linux Build Failed" \
+            --body "$(cat <<EOF
+          # One or more steps have failed!
+
+          **Log artifact:** \`build-log\` (download it from the workflow run page)
+          **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          )"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack
+        run: |
+          cp build/*.AppImage halo_kbd
+
+      - name: Compute tag
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          TAG=$(git describe --tags --exact-match 2>/dev/null || true)
+          SHORT=$(git rev-parse --short=8 HEAD)
+
+          if [ -n "$TAG" ]; then
+            echo "GIT_TAG=$TAG" >> "$GITHUB_ENV"
+          else
+            echo "GIT_TAG=halo_kbd.AppImage.$SHORT" >> "$GITHUB_ENV"
+          fi
+
+      - name: Create and push tag
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          if ! git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
+            git tag "${GIT_TAG}"
+            git push origin "${GIT_TAG}"
+          fi
+
+      - name: Create a GitHub release
+        if: ${{ github.event_name != 'pull_request' }}
+        shell: bash
+        run: |
+          files=(
+            halo_kbd
+          )
+
+          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
+            gh release upload "${GIT_TAG}" "${files[@]}" --clobber
+          else
+            gh release create "${GIT_TAG}" "${files[@]}" \
+              --title "${GIT_TAG}" \
+              --prerelease
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
