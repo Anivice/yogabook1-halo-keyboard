@@ -5,27 +5,25 @@ set(CMAKE_CXX_STANDARD 26)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options(
-            #-fsanitize=thread
-#            -fsanitize=undefined
+#            -fsanitize=thread
+#            -fsanitize=undefined -fsanitize=address
             -g3 -O0
     )
     add_link_options(
-#            -lubsan
-            #-ltsan
+#            -lubsan -lasan
+#            -ltsan
     )
     add_compile_definitions(DEBUG=1)
 else ()
     add_compile_definitions(DEBUG=0)
     set(OPTIMIZERS
             -O3
-#            -march=native
-#            -mtune=native
             -flto -fomit-frame-pointer
             -ffast-math -fstrict-aliasing
             -fdata-sections -ffunction-sections
             -D_FORTIFY_SOURCE=2 -fno-stack-protector
             -Wl,-z,relro -Wl,-z,now -s
-            -fno-rtti
+            -fno-rtti -fno-exceptions
     )
     add_compile_options(${OPTIMIZERS})
     add_link_options(${OPTIMIZERS})
@@ -69,14 +67,15 @@ add_compile_definitions(
         BUILD_ID="${BUILD_ID_PREFIX}:${BUILD_ID_TIMESTAMP}:${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
         __${BUILD_DESKTOP}__="${BUILD_DESKTOP}"
-        VERSION="1.0.0-Release"
+        VERSION="1.0.1-Release"
 )
 
 include_directories(include)
 add_executable(halo_kbd
-        emit_keys.cpp       include/emit_keys.h
         map_reader.cpp      include/map_reader.h
         entry.cpp           include/key_id.h
+        EmitKeys.cpp        include/EmitKeys.h
+        HaloKeyboard.cpp    include/HaloKeyboard.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
-#target_compile_options(halo_kbd PRIVATE -std=c++26 -freflection)
+target_compile_options(halo_kbd PRIVATE -std=gnu++26 -freflection)

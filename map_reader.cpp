@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <sstream>
 
+#include "assert_throw.h"
+
 bool is_this_within_key_location(const double x, const double y, const key_location_t &key)
 {
     return      (x >= key.key_pixel_top_left_x)
@@ -49,15 +51,11 @@ kbd_map read_key_map(std::ifstream & file)
             ss >> location.key_pixel_top_left_y;
             ss >> location.key_pixel_bottom_right_x;
             ss >> location.key_pixel_bottom_right_y;
-            if (!key
+            assert_throw (!(!key
                 || (location.key_pixel_top_left_x == 0)
                 || (location.key_pixel_top_left_y == 0)
                 || (location.key_pixel_bottom_right_x == 0)
-                || (location.key_pixel_bottom_right_y == 0))
-            {
-                throw std::invalid_argument("Invalid keyboard map!");
-            }
-
+                || (location.key_pixel_bottom_right_y == 0)));
             result.emplace(static_cast<key_id_t>(key), location);
         }
     }

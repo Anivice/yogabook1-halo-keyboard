@@ -2,10 +2,14 @@
 #define KEY_ID_H_
 
 #include <linux/input-event-codes.h>
+#include <limits>
 
-// group 1
+// Valid keycodes
 enum key_id_t : unsigned int
 {
+     KEY_ID_INVALID_KEY_CODE = std::numeric_limits<unsigned int>::max(),
+
+     // group 1
      KEY_ID_FN    = KEY_FN,
      KEY_ID_LCTRL = KEY_LEFTCTRL,
      KEY_ID_WIN   = KEY_LEFTMETA,
@@ -118,6 +122,7 @@ enum key_id_t : unsigned int
      INVERTED_KEY_PRINT          = KEY_PRINT,
 };
 
+/// This is the inverted key code (Fn inversion/switch) from F1 to F12
 constexpr unsigned int F1_to_F12_list[] =
 {
     INVERTED_KEY_MUTE,
