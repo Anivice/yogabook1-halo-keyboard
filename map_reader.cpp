@@ -1,7 +1,6 @@
 #include "map_reader.h"
 #include <stdexcept>
 #include <sstream>
-#include "log.hpp"
 
 bool is_this_within_key_location(const double x, const double y, const key_location_t &key)
 {
@@ -11,21 +10,24 @@ bool is_this_within_key_location(const double x, const double y, const key_locat
             &&  (y <= key.key_pixel_bottom_right_y);
 }
 
-void replace_all(
-    std::string & original,
-    const std::string & target,
-    const std::string & replacement)
+namespace
 {
-    if (target.empty()) return; // Avoid infinite loop if target is empty
+    void replace_all(
+        std::string & original,
+        const std::string & target,
+        const std::string & replacement)
+    {
+        if (target.empty()) return; // Avoid infinite loop if target is empty
 
-    if (target == " " && replacement.empty()) {
-        std::erase_if(original, [](const char c) { return c == ' '; });
-    }
+        if (target == " " && replacement.empty()) {
+            std::erase_if(original, [](const char c) { return c == ' '; });
+        }
 
-    size_t pos = 0;
-    while ((pos = original.find(target, pos)) != std::string::npos) {
-        original.replace(pos, target.length(), replacement);
-        pos += replacement.length(); // Move past the replacement to avoid infinite loop
+        size_t pos = 0;
+        while ((pos = original.find(target, pos)) != std::string::npos) {
+            original.replace(pos, target.length(), replacement);
+            pos += replacement.length(); // Move past the replacement to avoid infinite loop
+        }
     }
 }
 
@@ -56,7 +58,7 @@ kbd_map read_key_map(std::ifstream & file)
                 throw std::invalid_argument("Invalid keyboard map!");
             }
 
-            result.emplace(key, location);
+            result.emplace(static_cast<key_id_t>(key), location);
         }
     }
 

@@ -4,8 +4,10 @@
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
-#include "map_reader.h"
 #include <ranges>
+#include <stdexcept>
+#include "assert_throw.h"
+#include "map_reader.h"
 #include "emit_keys.h"
 
 void emit(const int fd, const uint16_t type, const uint16_t code, const int32_t value)

@@ -1,15 +1,16 @@
 cmake_minimum_required(VERSION 3.30)
 
 project(HaloKeyboard C CXX)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options(
             #-fsanitize=thread
-            -fsanitize=undefined -g3 -O0
+#            -fsanitize=undefined
+            -g3 -O0
     )
     add_link_options(
-            -lubsan
+#            -lubsan
             #-ltsan
     )
     add_compile_definitions(DEBUG=1)
@@ -76,10 +77,6 @@ add_executable(halo_kbd
         emit_keys.cpp       include/emit_keys.h
         map_reader.cpp      include/map_reader.h
         entry.cpp           include/key_id.h
-        log.cpp             include/log.hpp
-        execute_command.cpp include/execute_command.h
-        libmod.cpp          include/libmod.h
-        color.cpp           include/color.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
-add_library(fn_keymods SHARED fn_keymods.c include/ckeyid.h)
+#target_compile_options(halo_kbd PRIVATE -std=c++26 -freflection)

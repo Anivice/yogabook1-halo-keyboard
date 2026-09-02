@@ -1,8 +1,9 @@
 #ifndef MAP_READER_H
 #define MAP_READER_H
 
-#include <map>
+#include <unordered_map>
 #include <fstream>
+#include "key_id.h"
 
 struct key_location_t {
     double key_pixel_top_left_x;
@@ -12,7 +13,7 @@ struct key_location_t {
 };
 
 bool is_this_within_key_location(double x, double y, const key_location_t &);
-using kbd_map = std::map < unsigned int /* key */, key_location_t >;
+using kbd_map = std::unordered_map < key_id_t /* key */, key_location_t >;
 kbd_map read_key_map(std::ifstream &);
 
 #endif //MAP_READER_H
