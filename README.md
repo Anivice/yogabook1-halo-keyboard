@@ -3,7 +3,7 @@ Keyboard userspace driver for Yoga book YB1 X91F for Linux
 
 ## Introduction
 
-Yogabook 1 keyboard is actually nothing more than a touchpad, as in it is actually a touchscreen.
+Yogabook 1 keyboard is actually nothing more than a touchpad, as in, it is entirely just a touchscreen.
 By merely using the existing Linux kernel driver for touchscreens,
 one can detect key presses, record their positions and determine which keys were pressed.
 The exact position of each key is inside [yogabook1.map](yogabook1.map).
@@ -15,7 +15,7 @@ thus complicated workarounds were needed for my own use.
 Still, it is not an excuse for the code quality.
 Started as a service for ArchLinux with no GUI, it slowly grew into a
 full-fledged keyboard driver.
-Some features are removed, such as sticky keys, but their impacts
+Some features were removed, such as sticky keys, but their impacts
 like terrible code structure persist.
 
 Currently, the driver is only tested on ArchLinux with a generic kernel.
@@ -27,7 +27,7 @@ The driver is in an "it works" state.
 
 ### Build it from source
 
-You need to install C/C++ compilers supporting C++23,
+You need to install C/C++ compilers supporting C++26,
 `libinput`, `libudev`, `make` or `ninja`, and `cmake` first.
 If your compiler does not support any of the "optimization" flags,
 delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section):
@@ -35,6 +35,8 @@ delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section):
 https://github.com/Anivice/yogabook1-halo-keyboard/blob/632a8bfa927b9df2ca5501b889afc29a3c457405/CMakeLists.txt#L18-L28
 
 They don't matter at all.
+
+***YOU NEED C++ 26 REFLECTIONS, ONLY GCC >= 16.1 HAS THIS FEATURE***
 
 Build the driver with the following command:
 ```bash
@@ -59,7 +61,7 @@ executable file `halo_kbd` to `/usr/local/bin/halo_kbd`,
 and keymap file `yogabook1.map` to `/usr/local/etc/halo_keyboard/yogabook1.map`.
 Then, Start the service with `systemctl enable --now halo_vkbd.service`.
 
-> NOTE: `ctrlword.map` allows you to use Left Contrl with Left Arrow/Right Arrow
+> NOTE: `ctrlword.map` allows you to use Left Control with Left Arrow/Right Arrow
 > to skip words instead of individual characters in pure Linux console without any GUI setups.
 > Useful but entirely optional.
 > You can comment the `ExecStartPre=...loadkey...` line in systemd service file to remove the preloading of `ctrlword.map`.
@@ -82,15 +84,15 @@ by pressing the combination `Left Ctrl + Left Alt + Tab`, in order.
 ## Heads-ups
 
 Unimplemented features are mostly related to Airplane key and Settings key.
-KDE Plasma and Hyprland are the only two tested desktop environments
+KDE Plasma and hyprland are the only two tested desktop environments
 that seamlessly work with the driver,
 and support on other desktops, particularly GNOME, is not guaranteed.
 
 Malfunctioning on other desktops is most likely due to the presence of
-both emulated keyboard and existing physical keyboard.
-You need to have your desktop environment ignore the physical keyboard
+both emulated keyboard and existing touchpad.
+You need to have your desktop environment ignore the touchpad
 to use the driver properly.
-You CANNOT have libinput ignore the physical keyboard,
+You CANNOT have libinput ignore the touchpad,
 as the driver depends on libinput's signals to detect key presses.
 
 ## Is it suitable for daily use?
@@ -100,7 +102,7 @@ It gets the job done, and should impose no substantial issues.
 Not battle tested, but seems stable enough for daily use, if you ever plan to use YB1 X91F for anything, that is.
 
 To use foul language, I started this project as a "fuck around" with ArchLinux.
-I have BtrFS RAID0 setup on my Yogabook 1 to expand its storage space to 1TB.
+I have Btrfs RAID0 setup on my Yogabook 1 to expand its storage space to 1TB.
 Still, its performance is not good enough for daily use due to
 the external SD card has substantial I/O bottleneck.
-Nice concept laptop, though, I like this futuristic design nontheless.
+Nice concept laptop, though, I like this futuristic design nonetheless.
