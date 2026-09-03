@@ -47,7 +47,7 @@ execute_process(
 add_compile_definitions(
         BUILD_ID="${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
-        VERSION="1.0.1-Release"
+        VERSION="1.0.2-Release"
 )
 
 include_directories(include)
