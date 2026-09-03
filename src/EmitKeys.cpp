@@ -137,6 +137,11 @@ EmitKeys::EmitKeys(const int emit_fd): emit_fd_(emit_fd) {
                             fn_keys_.push_back(key);
                             key = new_key; // swap, so log can see the real key being pressed
                         }
+                        else
+                        {
+                            emit(emit_fd_, EV_KEY, key, 1); // press
+                            emit(emit_fd_, EV_SYN, SYN_REPORT, 0);
+                        }
                         break;
                     case KEY_ID_ESC:
                         if (fn_status_.load(std::memory_order_relaxed))
@@ -196,6 +201,11 @@ EmitKeys::EmitKeys(const int emit_fd): emit_fd_(emit_fd) {
                             emit(emit_fd_, EV_KEY, key, 0); // release
                             emit(emit_fd_, EV_SYN, SYN_REPORT, 0);
                             fn_keys_.erase(it);
+                        }
+                        else
+                        {
+                            emit(emit_fd_, EV_KEY, key, 0); // release
+                            emit(emit_fd_, EV_SYN, SYN_REPORT, 0);
                         }
                     }
                     break;

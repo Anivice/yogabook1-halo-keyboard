@@ -30,7 +30,7 @@ jobs:
             build-essential \
             software-properties-common \
             apt-transport-https \
-            cmake make git patchelf libtool ninja-build libinput-dev libudev-dev
+            cmake make git patchelf libtool ninja-build libinput-dev libudev-dev libcap-dev
 
       - name: Configure and Build
         run: |

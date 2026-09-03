@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 3.30)
 project(HaloKeyboard C CXX)
 set(CMAKE_CXX_STANDARD 20)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBINPUT  REQUIRED libinput)
+pkg_check_modules(LIBUDEV   REQUIRED libudev)
+pkg_check_modules(LIBCAP    REQUIRED libcap)
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_options(
 #            -fsanitize=thread
@@ -55,6 +60,9 @@ add_executable(halo_kbd
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
 target_compile_options(halo_kbd PRIVATE -std=gnu++20)
+target_include_directories(halo_kbd PRIVATE ${LIBINPUT_INCLUDE_DIRS} ${LIBUDEV_INCLUDE_DIRS} ${LIBCAP_INCLUDE_DIRS})
+target_link_directories(halo_kbd PRIVATE ${LIBINPUT_LIBRARY_DIRS} ${LIBUDEV_LIBRARY_DIRS} ${LIBCAP_LIBRARY_DIRS})
+target_link_libraries(halo_kbd PRIVATE ${LIBINPUT_LIBRARIES} ${LIBUDEV_LIBRARIES} ${LIBCAP_LIBRARIES})
 
 find_program(PATCHELF_EXEC NAMES patchelf REQUIRED)
 add_custom_target(AppImage_Stage1 ALL
