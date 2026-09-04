@@ -4,23 +4,18 @@ Keyboard userspace driver for Yoga book YB1 X91F for Linux
 
 ## Introduction
 
-Yogabook 1 keyboard is actually nothing more than a touchpad, as in, it is entirely just a touchscreen.
+Yoga book 1 keyboard is actually nothing more than a touchscreen.
+Its official name is "Goodix Capacitive TouchScreen."
 By merely using the existing Linux kernel driver for touchscreens,
 one can detect key presses, record their positions and determine which keys were pressed.
 The exact position of each key is inside [yogabook1.map](yogabook1.map).
 Fell free to edit it to match your own keyboard position.
 
-Yogabook 1 keyboard service used unnecessarily complicated code to detect
-and emit key presses as my own laptop has a terrible touchpad,
-thus complicated workarounds were needed for my own use.
-Still, it is not an excuse for the code quality.
-Started as a service for ArchLinux with no GUI, it slowly grew into a
-full-fledged keyboard driver.
-Some features were removed, such as sticky keys, but their impacts
-like terrible code structure persist.
-
-Currently, the driver is only tested on ArchLinux with a generic kernel.
-The driver is in an "it works" state.
+> NOTE: HOW DO I DETERMINE MY KEYBOARD POSITION?
+> 
+> Build the project using `CMAKE_BUILD_TYPE=Debug`,
+> your keypress coordinates will be shown in debug output.
+> **DO NOT** use the debug version as your normal drive as it will leak all inputs, passwords, etc.
 
 ## How To Use
 
@@ -28,8 +23,8 @@ The driver is in an "it works" state.
 
 ### Build it from source
 
-You need to install C/C++ compilers supporting C++26,
-`libinput`, `libudev`, `make` or `ninja`, and `cmake` first.
+You need to install C/C++ compilers supporting at least C++17 (GCC >= 14),
+`libinput`, `libudev`, `libcap`, `make` or `ninja`, and `cmake` first.
 If your compiler does not support any of the "optimization" flags,
 delete them from the `CMakeLists.txt` (`set(OPTIMIZERS ...)` section):
 
@@ -49,33 +44,28 @@ Build the driver with the following command:
 ### Download it from the release page
 
 Release page has provided an executable file for `halo_kbd` with no support for both Airplane Key and Settings Key.
-It has no runtime library dependencies, but you need `libinput` (from distro)
-and corresponding drivers (should already be built-in in generic Linux) to listen to touchpad events.
+It has no runtime library dependencies (built as AppImages, using GitHub Actions), but you need `libinput` (from distro)
+and corresponding drivers (generic Linux should have these already built-in) to listen to touchpad events.
 
 **Then**
 
 Copy the systemd service file to `/etc/systemd/system/halo_vkbd.service`,
 executable file `halo_kbd` to `/usr/local/bin/halo_kbd`,
-(optional) `ctrlword.map` to `/usr/local/etc/halo_keyboard/ctrlword.map`,
 and keymap file `yogabook1.map` to `/usr/local/etc/halo_keyboard/yogabook1.map`.
 Then, Start the service with `systemctl enable --now halo_vkbd.service`.
-
-> NOTE: `ctrlword.map` allows you to use Left Control with Left Arrow/Right Arrow
-> to skip words instead of individual characters in pure Linux console without any GUI setups.
-> Useful but entirely optional.
-> You can comment the `ExecStartPre=...loadkey...` line in systemd service file to remove the preloading of `ctrlword.map`.
 
 ## Currently Supported Features
 
 Currently, the driver behaves like what it intended to do,
 as in both keyboard emulation and touchpad emulation.
-Tested on KDE and KDE recognizes both keyboard and touchpad
-with touchpad gestures working properly.
+Tested on KDE and Hyprland.
+
+This driver assumes at most three-finger gestures.
 
 ## Heads-ups
 
 Unimplemented features are mostly related to Airplane key and Settings key.
-KDE Plasma and hyprland are the only two tested desktop environments
+KDE Plasma and Hyprland are the only two tested desktop environments
 that seamlessly work with the driver,
 and support on other desktops, particularly GNOME, is not guaranteed.
 
@@ -83,15 +73,17 @@ Malfunctioning on other desktops is most likely due to the presence of
 both emulated keyboard and existing touchpad.
 You need to have your desktop environment ignore the touchpad
 to use the driver properly.
-You CANNOT have libinput ignore the touchpad,
-as the driver depends on libinput's signals to detect key presses.
+You CANNOT have `libinput` ignore the touchpad,
+as the driver depends on `libinput`'s signals to detect key presses.
 
 **NOTE: GNOME >= 48**
 
-GNOME >= 48 is not supported. GNOME cannot specifically ignore one input device (like any other DE) under wayland,
-and since it deprecated X11, you cannot disable the touchscreen signal in Wayland without completely nuke the device.
-Disable input signal in libinput will disable everyone's ability to see the device, including this driver.
-As a result, GNOME >= 48 cannot use this keyboard (under any circumstances, ever, and will never be fixed).
+GNOME >= 48 is not supported. GNOME cannot specifically ignore one input device (like any other DE) under Wayland,
+and since it has already long deprecated X11, you cannot disable the touchscreen signal in Wayland
+without completely nuke the device.
+Disabling the input signal in `libinput` (using udev rules) will disable everyone's ability to see the device,
+including this driver.
+As a result, GNOME >= 48 cannot use this keyboard (under any circumstances, ever, and could & will never be fixed).
 If you plan to install a modern distro, consider KDE instead.
 
 ## Is it suitable for daily use?
