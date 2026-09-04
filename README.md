@@ -88,6 +88,14 @@ to use the driver properly.
 You CANNOT have libinput ignore the touchpad,
 as the driver depends on libinput's signals to detect key presses.
 
+**NOTE: GNOME >= 48**
+
+GNOME >= 48 is not supported. GNOME cannot specifically ignore one input device (like any other DE) under wayland,
+and since it deprecated X11, you cannot disable the touchscreen signal in Wayland without completely nuke the device.
+Disable input signal in libinput will disable everyone's ability to see the device, including this driver.
+As a result, GNOME >= 48 cannot use this keyboard (under any circumstances, ever, and will never be fixed).
+If you plan to install a modern distro, consider KDE instead.
+
 ## Is it suitable for daily use?
 
 This keyboard driver is what you would expect from Lenovo, but without any vibration support.
