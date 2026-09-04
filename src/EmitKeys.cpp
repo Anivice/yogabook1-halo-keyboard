@@ -154,7 +154,6 @@ EmitKeys::EmitKeys(const int emit_fd): emit_fd_(emit_fd) {
                                 fn_lock = true;
                             }
                         }
-                        break;
                     default:
                         emit(emit_fd_, EV_KEY, key, 1); // press
                         emit(emit_fd_, EV_SYN, SYN_REPORT, 0);
