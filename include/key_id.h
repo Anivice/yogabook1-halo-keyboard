@@ -24,7 +24,7 @@ enum key_id_t : unsigned int
      KEY_ID_DOWN  = KEY_DOWN,
      KEY_ID_RIGHT = KEY_RIGHT,
 
-    // group 2
+     // group 2
      KEY_ID_LSHIFT    = KEY_LEFTSHIFT,
      KEY_ID_Z         = KEY_Z,
      KEY_ID_X         = KEY_X, // 45
@@ -38,7 +38,7 @@ enum key_id_t : unsigned int
      KEY_ID_QUESTION  = KEY_SLASH,
      KEY_ID_RSHIFT    = KEY_RIGHTSHIFT, // 54
 
-    // group 3
+     // group 3
      KEY_ID_CAPSLOCK      = KEY_CAPSLOCK,
      KEY_ID_A             = KEY_A, // 30
      KEY_ID_S             = KEY_S, // 31
@@ -53,7 +53,7 @@ enum key_id_t : unsigned int
      KEY_ID_DOUBLEQUOTE   = KEY_APOSTROPHE, // 40
      KEY_ID_ENTER         = KEY_ENTER, // 28
 
-    // group 4
+     // group 4
      KEY_ID_TAB        = KEY_TAB, // 15
      KEY_ID_Q          = KEY_Q, // 16
      KEY_ID_W          = KEY_W, // 17
@@ -69,7 +69,7 @@ enum key_id_t : unsigned int
      KEY_ID_RIGHTBRACE = KEY_RIGHTBRACE, // 27
      KEY_ID_BACKSLASH  = KEY_BACKSLASH, // 43
 
-    // group 5
+     // group 5
      KEY_ID_GRAVE     = KEY_GRAVE, // 41
      KEY_ID_1         = KEY_1, // 2
      KEY_ID_2         = KEY_2, // 3
@@ -85,7 +85,7 @@ enum key_id_t : unsigned int
      KEY_ID_EQUAL     = KEY_EQUAL, // 13
      KEY_ID_BACKSPACE = KEY_BACKSPACE, // 14
 
-    // group 6
+     // group 6
      KEY_ID_ESC       = KEY_ESC, // 1
      KEY_ID_F1        = KEY_F1, // 59
      KEY_ID_F2        = KEY_F2, // 60
@@ -101,8 +101,8 @@ enum key_id_t : unsigned int
      KEY_ID_F12       = KEY_F12, // 88
      KEY_ID_DELETE    = KEY_DELETE, // 111
 
-    // group 7
-     KEY_ID_MOUSELEFT  = BTN_MOUSE,
+     // group 7
+     KEY_ID_MOUSELEFT  = BTN_LEFT,
      KEY_ID_MOUSERIGHT = BTN_RIGHT,
      KEY_ID_TOUCHPAD   = 512,
 

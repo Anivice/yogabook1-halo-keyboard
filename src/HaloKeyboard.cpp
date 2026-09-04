@@ -44,7 +44,7 @@ void HaloKeyboard::worker()
                     continue; // skipped the device
                 }
 
-                const auto slot = static_cast<key_id_t>(libinput_event_touch_get_seat_slot(tev));
+                const auto slot = libinput_event_touch_get_seat_slot(tev);
                 double x = 0.00f, y = 0.00f;
                 if (type != LIBINPUT_EVENT_TOUCH_UP) {
                     x = libinput_event_touch_get_x_transformed(tev, 1920);

@@ -37,8 +37,6 @@ https://github.com/Anivice/yogabook1-halo-keyboard/blob/632a8bfa927b9df2ca5501b8
 
 They don't matter at all.
 
-***YOU NEED C++ 26 REFLECTIONS, ONLY GCC >= 16.1 HAS THIS FEATURE***
-
 Build the driver with the following command:
 ```bash
     git clone https://github.com/anivice/yogabook1-halo-keyboard.git \
