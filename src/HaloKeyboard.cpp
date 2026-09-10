@@ -143,17 +143,19 @@ namespace
         assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_END) != -1);
         assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SCROLLUP) != -1);
         assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SCROLLDOWN) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_FN) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_MUTE) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_VOLUMEDOWN) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_VOLUMEUP) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_BRIGHTNESSDOWN) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_BRIGHTNESSUP) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_SEARCH) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PREVIOUSSONG) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PLAYPAUSE) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_NEXTSONG) != -1);
-        assert_throw(ioctl(fd, UI_SET_KEYBIT, KEY_PRINT) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_FNLOCK) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_MUTE) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_VOLUMEDOWN) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_VOLUMEUP) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_BRIGHTNESSDOWN) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_BRIGHTNESSUP) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_SEARCH) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_PREVIOUSSONG) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_PLAYPAUSE) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_NEXTSONG) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_PRINT) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_AIRPLANEMODE) != -1);
+        assert_throw(ioctl(fd, UI_SET_KEYBIT, INVERTED_KEY_SETTINGS) != -1);
 
         /* 2.  Create the virtual device */
         uinput_setup usetup{};
