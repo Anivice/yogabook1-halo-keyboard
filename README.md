@@ -64,7 +64,6 @@ This driver assumes at most three-finger gestures.
 
 ## Heads-ups
 
-Unimplemented features are mostly related to Airplane key and Settings key.
 KDE Plasma and Hyprland are the only two tested desktop environments
 that seamlessly work with the driver,
 and support on other desktops, particularly GNOME, is not guaranteed.
