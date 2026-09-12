@@ -1,7 +1,10 @@
 #include "HaloKeyboard.h"
+
+#include <algorithm>
+
 #include "log.hpp"
 #include "assert_throw.h"
-
+#include "ExecuteCommands.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <cstring>
@@ -97,6 +100,24 @@ void HaloKeyboard::worker()
                         print("Key ", key_id_translate(determined_key),
                               " (", determined_key, ") press registered, slot=", slot, ", coordinate=(", x, ", ", y, ")\n");
                         emit_keys_->push_notifier_.push(determined_key);
+                        if (!haptic_command_.empty())
+                        {
+                            haptic_threads_.emplace_back([this] {
+                                print("Haptic event triggering /bin/sh -c '", haptic_command_, "' ...");
+                                auto copy_haptic_command_ = haptic_command_;
+                                exec_command("/bin/sh", "", "-c", copy_haptic_command_);
+                                print("...done.\n");
+                            });
+
+                            if (haptic_threads_.size() > 4096)
+                            {
+                                std::ranges::for_each(haptic_threads_, [](std::thread &t) {
+                                    if (t.joinable()) t.join();
+                                });
+
+                                haptic_threads_.clear();
+                            }
+                        }
                     }
                 }
                 else {
@@ -238,7 +259,7 @@ namespace
     }
 }
 
-HaloKeyboard::HaloKeyboard(const std::string &key_map)
+HaloKeyboard::HaloKeyboard(const std::string &key_map, std::string haptic_command) : haptic_command_(std::move(haptic_command))
 {
     // Load keyboard layout
     print("Loading keymap...");
@@ -291,6 +312,7 @@ HaloKeyboard::~HaloKeyboard()
 {
     print("Main loop stopping...\n");
     running_.store(false, std::memory_order_relaxed);
+    for (auto & T : haptic_threads_) if (T.joinable()) T.join();
     if (thread_.joinable()) thread_.join();
     // delete devices
     libinput_unref(li_);

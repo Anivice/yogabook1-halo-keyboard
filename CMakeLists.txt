@@ -47,7 +47,7 @@ execute_process(
 add_compile_definitions(
         BUILD_ID="${BUILD_ID_GIT_HEAD}"
         BUILD_TIME="${BUILD_TIME}"
-        VERSION="1.0.3-Release"
+        VERSION="1.0.4-Release"
 )
 
 include_directories(include)
@@ -57,6 +57,7 @@ add_executable(halo_kbd
                                 include/key_id.h
         src/EmitKeys.cpp        include/EmitKeys.h
         src/HaloKeyboard.cpp    include/HaloKeyboard.h
+        src/ExecuteCommands.cpp include/ExecuteCommands.h
 )
 target_link_libraries(halo_kbd PRIVATE input udev)
 target_compile_options(halo_kbd PRIVATE -std=gnu++20)

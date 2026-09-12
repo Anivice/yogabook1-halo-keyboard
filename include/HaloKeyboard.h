@@ -20,9 +20,11 @@ class HaloKeyboard
     libinput *li_;
     udev *udev_;
     pollfd pfd_ { };
-    std::thread thread_; // worker thread
+    std::vector<std::thread> haptic_threads_; // haptic worker threads
+    std::thread thread_; // main worker thread
     std::atomic_bool running_ { true }; // running flag
     std::unique_ptr<EmitKeys> emit_keys_; // key code press/release handlers
+    std::string haptic_command_;
 
     /// main worker, registering key presses and releases
     void worker();
@@ -30,7 +32,8 @@ public:
 
     /// Halo keyboard main entity
     /// @param key_map path to keyboard geometry map
-    explicit HaloKeyboard(const std::string & key_map);
+    /// @param haptic_command Haptic command
+    explicit HaloKeyboard(const std::string & key_map, std::string haptic_command = "");
     ~HaloKeyboard();
 };
 

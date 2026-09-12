@@ -19,14 +19,14 @@ namespace
 int main(int argc, char** argv)
 {
     print<is_error>("Halo Keyboard and TouchPad userspace driver [BuildID=", BUILD_ID, ", BuildTime=", BUILD_TIME, "] version " VERSION "\n");
-    if (argc != 2)
+    if (argc != 2 && argc != 3)
     {
-        print<is_error>("Usage: ", argv[0], " <map_file>\n");
+        print<is_error>("Usage: ", argv[0], " <map_file> [HAPTIC COMMAND]\n");
         return EXIT_FAILURE;
     }
 
     std::signal(SIGINT, sigint_handler);
-    HaloKeyboard keyboard(argv[1]);
+    HaloKeyboard keyboard(argv[1], argc == 3 ? argv[2] : "");
     while (ctrl_c.load(std::memory_order_relaxed) == 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
