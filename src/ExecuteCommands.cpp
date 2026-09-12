@@ -27,8 +27,7 @@
 cmd_status exec_command_(
     const std::string &cmd,
     const std::vector<std::string> &args,
-    const std::string &input)
-{
+    const std::string &input) {
     cmd_status status{"", "", 1};   // fail by default
     int pipes[3][2];                // stdin, stdout, stderr
 
@@ -93,103 +92,97 @@ cmd_status exec_command_(
 
     // Ensure wait_child() runs even on early returns
     // (in production use a proper RAII wrapper)
-    try {
-        // Prepare input, add newline if missing
-        std::string in = input;
-        if (in.empty() || in.back() != '\n') in.push_back('\n');
-        const char *in_ptr = in.data();
-        auto remaining  = static_cast<ssize_t>(in.size());
+    // Prepare input, add newline if missing
+    std::string in = input;
+    if (in.empty() || in.back() != '\n') in.push_back('\n');
+    const char *in_ptr = in.data();
+    auto remaining  = static_cast<ssize_t>(in.size());
 
-        bool stdin_closed = false;
-        bool stdout_closed = false;
-        bool stderr_closed = false;
+    bool stdin_closed = false;
+    bool stdout_closed = false;
+    bool stderr_closed = false;
 
-        while (!stdout_closed || !stderr_closed) {
-            std::vector<pollfd> fds;
-            if (!stdin_closed) {
-                fds.push_back({fd_stdin, POLLOUT, 0});
+    while (!stdout_closed || !stderr_closed)
+    {
+        std::vector<pollfd> fds;
+        if (!stdin_closed) {
+            fds.push_back({fd_stdin, POLLOUT, 0});
+        }
+        if (!stdout_closed) {
+            fds.push_back({fd_stdout, POLLIN, 0});
+        }
+        if (!stderr_closed) {
+            fds.push_back({fd_stderr, POLLIN, 0});
+        }
+
+        if (int ret = poll(fds.data(), fds.size(), -1); ret < 0) {
+            if (errno == EINTR) continue;
+            status.fd_stderr = "poll failed: " + std::string(strerror(errno));
+            wait_child();
+            return status;
+        }
+
+        for (auto &p : fds) {
+            if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                // pipe error or hangup – close and stop monitoring
+                close(p.fd);
+                if (p.fd == fd_stdin)  stdin_closed = true;
+                if (p.fd == fd_stdout) stdout_closed = true;
+                if (p.fd == fd_stderr) stderr_closed = true;
+                continue;
             }
-            if (!stdout_closed) {
-                fds.push_back({fd_stdout, POLLIN, 0});
-            }
-            if (!stderr_closed) {
-                fds.push_back({fd_stderr, POLLIN, 0});
-            }
 
-            int ret = poll(fds.data(), fds.size(), -1);
-            if (ret < 0) {
-                if (errno == EINTR) continue;
-                status.fd_stderr = "poll failed: " + std::string(strerror(errno));
-                wait_child();
-                return status;
-            }
-
-            for (auto &p : fds) {
-                if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                    // pipe error or hangup – close and stop monitoring
-                    close(p.fd);
-                    if (p.fd == fd_stdin)  stdin_closed = true;
-                    if (p.fd == fd_stdout) stdout_closed = true;
-                    if (p.fd == fd_stderr) stderr_closed = true;
-                    continue;
-                }
-
-                if (p.fd == fd_stdin && (p.revents & POLLOUT)) {
-                    ssize_t n = write(fd_stdin, in_ptr, remaining);
-                    if (n > 0) {
-                        in_ptr += n;
-                        remaining -= n;
-                        if (remaining == 0) {
-                            close(fd_stdin);
-                            stdin_closed = true;
-                        }
-                    } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
-                        status.fd_stderr = "write to child failed: " +
-                                           std::string(strerror(errno));
-                        wait_child();
-                        return status;
+            if (p.fd == fd_stdin && (p.revents & POLLOUT))
+            {
+                if (const ssize_t n = write(fd_stdin, in_ptr, remaining); n > 0) {
+                    in_ptr += n;
+                    remaining -= n;
+                    if (remaining == 0) {
+                        close(fd_stdin);
+                        stdin_closed = true;
                     }
+                } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
+                    status.fd_stderr = "write to child failed: " +
+                                       std::string(strerror(errno));
+                    wait_child();
+                    return status;
                 }
+            }
 
-                if (p.fd == fd_stdout && (p.revents & POLLIN)) {
-                    char buf[4096];
-                    ssize_t n = read(fd_stdout, buf, sizeof(buf));
-                    if (n > 0) {
-                        status.fd_stdout.append(buf, n);
-                    } else if (n == 0) {
-                        close(fd_stdout);
-                        stdout_closed = true;
-                    } else if (errno != EAGAIN && errno != EINTR) {
-                        status.fd_stderr = "read stdout failed: " +
-                                           std::string(strerror(errno));
-                        wait_child();
-                        return status;
-                    }
+            if (p.fd == fd_stdout && (p.revents & POLLIN)) {
+                char buf[4096];
+                ssize_t n = read(fd_stdout, buf, sizeof(buf));
+                if (n > 0) {
+                    status.fd_stdout.append(buf, n);
+                } else if (n == 0) {
+                    close(fd_stdout);
+                    stdout_closed = true;
+                } else if (errno != EAGAIN && errno != EINTR) {
+                    status.fd_stderr = "read stdout failed: " +
+                                       std::string(strerror(errno));
+                    wait_child();
+                    return status;
                 }
+            }
 
-                if (p.fd == fd_stderr && (p.revents & POLLIN)) {
-                    char buf[4096];
-                    ssize_t n = read(fd_stderr, buf, sizeof(buf));
-                    if (n > 0) {
-                        status.fd_stderr.append(buf, n);
-                    } else if (n == 0) {
-                        close(fd_stderr);
-                        stderr_closed = true;
-                    } else if (errno != EAGAIN && errno != EINTR) {
-                        status.fd_stderr = "read stderr failed: " +
-                                           std::string(strerror(errno));
-                        wait_child();
-                        return status;
-                    }
+            if (p.fd == fd_stderr && (p.revents & POLLIN)) {
+                char buf[4096];
+                ssize_t n = read(fd_stderr, buf, sizeof(buf));
+                if (n > 0) {
+                    status.fd_stderr.append(buf, n);
+                } else if (n == 0) {
+                    close(fd_stderr);
+                    stderr_closed = true;
+                } else if (errno != EAGAIN && errno != EINTR) {
+                    status.fd_stderr = "read stderr failed: " +
+                                       std::string(strerror(errno));
+                    wait_child();
+                    return status;
                 }
             }
         }
-
-        wait_child();
-    } catch (...) {
-        wait_child();
-        throw;
     }
 
+    wait_child();
     return status;
 }
